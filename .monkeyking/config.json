@@ -1,0 +1,32 @@
+{
+    "default": "ark",
+    "models": {
+        "gpt-4o-mini": {
+            "provider": "openai",
+            "model_name": "gpt-4o-mini",
+            "api_key": "",
+            "base_url": null
+        },
+        "ark": {
+            "provider": "volcengine",
+            "model_name": "ep-20260304104754-6q95m",
+            "api_key": "xxxx",
+            "base_url": "https://ark.cn-beijing.volces.com/api/v3"
+        }
+    },
+    "tools": {
+        "weather_checker": {
+            "openweathermap_api_key": "test_key_123",
+            "gaode_api_key": "xxx"
+        },
+        "baidu_search": {
+            "appbuilder_api_key": "xxx"
+        },
+        "web_search": {
+            "appbuilder_api_key": ""
+        }
+    },
+    "memory": {
+        "consolidation_window": 20
+    }
+}
