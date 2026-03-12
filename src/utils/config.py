@@ -61,6 +61,11 @@ class LLMConfig:
             },
             "web_search": {
                 "appbuilder_api_key": ""
+            },
+            "feishu_channel": {
+                "app_id": "",
+                "app_secret": "",
+                "verification_token": ""
             }
         },
         "memory": {

@@ -120,5 +120,28 @@ def version():
     """
     typer.echo("MonkeyKing Version: 0.1.0")
 
+@app.command(name="server")
+def start_server(
+    mode: str = typer.Option("websocket", "--mode", "-m", help="启动模式: websocket (免公网IP) 或 webhook (需公网IP)"),
+    host: str = typer.Option("0.0.0.0", "--host", "-h", help="监听主机地址（仅 webhook 模式有效）"),
+    port: int = typer.Option(8000, "--port", "-p", help="监听端口号（仅 webhook 模式有效）")
+):
+    """
+    启动 MonkeyKing 多渠道交互服务端。
+    支持长连接 (WebSocket) 和 Webhook 两种模式。
+    """
+    from src.utils.cli import print_logo, print_system_message
+    from src.api.server import run_websocket_server
+    import uvicorn
+    
+    print_logo()
+    
+    if mode == "websocket":
+        print_system_message("--- MonkeyKing 长连接监听已开启 (免公网IP模式) ---")
+        run_websocket_server()
+    else:
+        print_system_message(f"--- MonkeyKing Webhook 服务端正在启动 ({host}:{port}) ---")
+        uvicorn.run("src.api.server:app", host=host, port=port, reload=False)
+
 if __name__ == "__main__":
     app()
