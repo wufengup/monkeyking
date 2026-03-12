@@ -4,11 +4,39 @@
 
 > **📖 诞生足迹**：想要了解大圣是如何从一块顽石进化为齐天大圣的？请参阅 [MonkeyKing 灵猴孵化真经](./MonkeyKing_Incubation_Story.md)。
 
-## 运行指南
+## 🐒 大圣自荐
 
-本项目使用 `uv` 进行包管理和运行。请确保你已安装 [uv](https://github.com/astral-sh/uv)。
+嘿嘿，见信好！俺老孙乃是齐天大圣，现在的身份是你的个人助理 **MonkeyKing**。
+
+目前，俺主要通过 **控制台（Terminal）** 随时待命。只要你一声令下，俺不仅能陪你谈天说地，还能施展一身“法宝”与“神通”为你排忧解难。
+
+> **📜【法宝与神通展示】**
+>
+> **用户**：大圣，你现在都有哪些本事？
+>
+> **MonkeyKing 🐒**：嘿嘿，俺老孙现在的本事可不少！
+> 1. **如意法宝（Tools）**：
+>    - `directory_lister` / `file_reader`：穿梭于目录，查阅文书。
+>    - `file_writer` / `directory_creator`：搬砖运瓦，创建文件。
+>    - `web_search` / `baidu_search`：火眼金睛，洞察全网实时资讯。
+>    - `tool_config_manager`：打理百宝箱，管理各项 API 密钥。
+> 2. **进阶神通（Skills）**：
+>    - **灵猴自进化** (`SkillSelfEvolution`)：俺能自己写代码、炼制新法宝。
+>    - **气象洞察** (`WeatherAdvisorySkill`)：不仅能查天气，还能给你穿衣建议。
+>    - **文件治理** (`FileGovernanceSkill`)：帮你整理乱糟糟的文件夹。
+>    - **深度调研** (`DeepResearchSkill`)：针对复杂问题进行全网深挖。
+>    - **记忆治理** (`MemoryGovernanceSkill`)：帮俺梳理咱俩的陈年旧账。
+>    - **任务调度** (`SchedulingSkill`)：帮主人记挂着待办事项，绝不误事！
+
+---
+
+## 🤝 如何招募大圣
+
+想要让俺老孙常驻你的电脑，为你效劳？只需按照下面的步骤施展“招募咒”即可：
 
 ### 1. 环境初始化
+
+本项目使用 `uv` 进行包管理。请确保你已安装 [uv](https://github.com/astral-sh/uv)。
 
 首先，同步项目依赖并以可编辑模式安装：
 
@@ -41,27 +69,29 @@ monkeyking init
 monkeyking init --force
 ```
 
-### 4. 配置 LLM
+### 4. 配置 LLM（灵力来源）
 
 编辑生成的配置文件 `~/.monkeyking/config.json`，填入你的 API Key 和模型信息。支持 OpenAI 和火山引擎（Ark）：
 
 - **OpenAI**: 填入 `api_key`。
 - **火山引擎**: 填入 `api_key` 和对应的 `model_name` (Endpoint ID)。
 
-### 5. 启动 Agent
+### 5. 正式启动
 
-配置完成后，使用以下命令进入交互模式：
+配置完成后，使用以下命令让大圣现身：
 
 ```bash
 monkeyking agent
 ```
 
-#### 常用参数：
+#### 常用启动参数：
 - `--name`, `-n`: 指定 Agent 名称（默认：MonkeyKing）。
 - `--alias`, `-a`: 使用配置文件中指定的模型别名（如 `ark`, `gpt-4o-mini`）。
 - `--provider`, `-p`: 临时指定供应商（`openai` 或 `volcengine`）。
 
-### 6. 其他命令
+---
 
-- 查看版本：`monkeyking version`
-- 强制重新初始化配置：`monkeyking init --force`
+## 🛠️ 其他辅助指令
+
+- **查看版本**：`monkeyking version`
+- **强制重置配置**：`monkeyking init --force`

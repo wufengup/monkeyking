@@ -61,6 +61,7 @@ ENV/
 # 依赖包清单（可选：如果不想上传，可注释）
 # requirements.txt
 # Pipfile.lock
+uv.lock
 
 # 缓存/日志文件
 *.egg-info/
