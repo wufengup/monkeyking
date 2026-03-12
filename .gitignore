@@ -1,0 +1,98 @@
+# ===================== 系统/编辑器相关 =====================
+# macOS 系统文件
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows 系统文件
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+
+# IDE/编辑器配置（VSCode/PyCharm/Sublime）
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-*
+.project
+.pydevproject
+.settings/
+*.iml
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.bak
+
+# ===================== Python 项目相关 =====================
+# 字节码文件
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 编译后的扩展
+*.so
+*.pyd
+
+# 虚拟环境（关键！避免上传本地虚拟环境）
+venv/
+env/
+env3/
+.venv/
+.env/
+ENV/
+
+# 依赖包清单（可选：如果不想上传，可注释）
+# requirements.txt
+# Pipfile.lock
+
+# 缓存/日志文件
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+logs/
+
+# 数据文件（避免上传大文件/敏感数据）
+*.csv
+*.xlsx
+*.jsonl
+data/
+*.db
+*.sqlite3
+
+# ===================== AI Agent 专属 =====================
+# 敏感配置（API Key/令牌等）
+.env
+.env.local
+.env.*
+*.secret
+*.key
+
+# 本地生成的文件（比如 Agent 写入的结果）
+agent_result.txt
+*.txt
+*.md.bak
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+*.temp
