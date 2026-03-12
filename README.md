@@ -2,6 +2,8 @@
 
 定位：个人 AI 助手，能说会笑，有手有脚。
 
+> **📖 诞生足迹**：想要了解大圣是如何从一块顽石进化为齐天大圣的？请参阅 [MonkeyKing 灵猴孵化真经](./MonkeyKing_Incubation_Story.md)。
+
 ## 运行指南
 
 本项目使用 `uv` 进行包管理和运行。请确保你已安装 [uv](https://github.com/astral-sh/uv)。
