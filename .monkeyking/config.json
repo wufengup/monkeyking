@@ -9,7 +9,7 @@
         },
         "ark": {
             "provider": "volcengine",
-            "model_name": "ep-20260304104754-6q95m",
+            "model_name": "xxxx",
             "api_key": "xxxx",
             "base_url": "https://ark.cn-beijing.volces.com/api/v3"
         }
