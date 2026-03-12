@@ -14,6 +14,9 @@ from pathlib import Path
 class AssistantAgent(BaseAgent):
     def __init__(self, name: str = "MonkeyKing", model_params: Optional[Dict[str, Any]] = None):
         super().__init__(name)
+        # 0. 确保基础配置目录和路径已初始化
+        LLMConfig.ensure_config_exists()
+        
         # 1. 初始化模型参数
         self.llm_params = model_params or LLMConfig.get_llm_params()
         

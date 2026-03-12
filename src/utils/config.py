@@ -61,9 +61,6 @@ class LLMConfig:
             },
             "web_search": {
                 "appbuilder_api_key": ""
-            },
-            "baidu_search": {
-                "appbuilder_api_key": ""
             }
         },
         "memory": {

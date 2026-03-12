@@ -18,7 +18,7 @@
 > 1. **如意法宝（Tools）**：
 >    - `directory_lister` / `file_reader`：穿梭于目录，查阅文书。
 >    - `file_writer` / `directory_creator`：搬砖运瓦，创建文件。
->    - `web_search` / `baidu_search`：火眼金睛，洞察全网实时资讯。
+>    - `web_search`：火眼金睛，洞察全网实时资讯。
 >    - `tool_config_manager`：打理百宝箱，管理各项 API 密钥。
 > 2. **进阶神通（Skills）**：
 >    - **灵猴自进化** (`SkillSelfEvolution`)：俺能自己写代码、炼制新法宝。

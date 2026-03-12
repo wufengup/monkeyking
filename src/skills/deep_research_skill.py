@@ -24,7 +24,7 @@ class DeepResearchSkill(BaseMonkeyKingSkill):
     - 如果首轮搜索结果不理想，尝试更换同义词或专业术语再次搜索。
 2. **多源验证**：
     - 不要只相信第一个搜索结果。
-    - 针对国内实时资讯，百度搜索（通过 web_search 法宝）通常能提供最丰富、最准确的内容。
+    - 使用 web_search 法宝进行全网检索，它能提供丰富、准确的内容。
     - 交叉验证多个站点的信息，确保事实的准确性。
 3. **结构化输出**：
     - 将搜索到的零散信息整理为：现状、原因分析、大圣建议（结合教员远见）。
@@ -35,4 +35,4 @@ class DeepResearchSkill(BaseMonkeyKingSkill):
 
     @property
     def required_tools(self) -> List[str]:
-        return ["web_search", "baidu_search"]
+        return ["web_search"]

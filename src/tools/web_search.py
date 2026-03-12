@@ -35,20 +35,20 @@ class WebSearchTool(BaseMonkeyKingTool):
     def _run(self, query: str, count: int = 10) -> str:
         """执行联网搜索逻辑 (默认使用百度)"""
         # 1. 尝试从配置中获取 API Key
-        # 优先使用 baidu_search 的配置，如果没有则回退到 web_search 的配置
-        config = LLMConfig.get_tool_config("baidu_search")
+        # 优先使用 web_search 的配置，如果没有则回退到 baidu_search 的配置（兼容旧配置）
+        config = LLMConfig.get_tool_config("web_search")
         api_key = config.get("appbuilder_api_key")
         
         if not api_key:
-            # 兼容性检查：如果用户之前是在 web_search 下设置的
-            web_config = LLMConfig.get_tool_config("web_search")
-            api_key = web_config.get("appbuilder_api_key")
+            # 兼容性检查：如果用户之前是在 baidu_search 下设置的
+            old_config = LLMConfig.get_tool_config("baidu_search")
+            api_key = old_config.get("appbuilder_api_key")
 
         if not api_key:
             return (
                 "错误：缺少百度千帆 AppBuilder API Key。\n"
                 "俺老孙的火眼金睛无法直达百度云端。请主人前往百度智能云获取 AppBuilder API Key，"
-                "并告诉我要‘更新 baidu_search 的 appbuilder_api_key’。"
+                "并告诉我要‘更新 web_search 的 appbuilder_api_key’。"
             )
 
         # 2. 调用百度搜索 API

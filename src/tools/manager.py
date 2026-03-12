@@ -7,7 +7,6 @@ from src.tools.file_writer import FileWriterTool
 from src.tools.skill_installer import SkillInstallerTool
 from src.tools.tool_config_manager import ToolConfigManagerTool
 from src.tools.web_search import WebSearchTool
-from src.tools.baidu_search import BaiduSearchTool
 from src.tools.memory_consolidation import MemoryConsolidationTool
 from src.tools.scheduling_tools import ScheduleTaskTool, ListTasksTool, ManageTaskTool
 from src.utils.scheduler import SchedulerManager
@@ -57,7 +56,6 @@ class CapabilityManager:
         self.register_tool(DirectoryCreatorTool())
         self.register_tool(FileWriterTool())
         self.register_tool(WebSearchTool())
-        self.register_tool(BaiduSearchTool())
         
         # 定时任务法宝
         st = ScheduleTaskTool(); st._scheduler = self.scheduler
@@ -146,7 +144,7 @@ class CapabilityManager:
             if file.name in ["__init__.py", "base_tool.py", "manager.py", 
                             "file_reader.py", "directory_lister.py", 
                             "directory_creator.py", "file_writer.py", "skill_installer.py",
-                            "baidu_search.py", "web_search.py", "memory_consolidation.py",
+                            "web_search.py", "memory_consolidation.py",
                             "tool_config_manager.py", "scheduling_tools.py"]:
                 continue
             
