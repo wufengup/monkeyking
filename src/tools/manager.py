@@ -11,12 +11,7 @@ from src.tools.memory_consolidation import MemoryConsolidationTool
 from src.tools.scheduling_tools import ScheduleTaskTool, ListTasksTool, ManageTaskTool
 from src.utils.scheduler import SchedulerManager
 from src.skills.base_skill import BaseMonkeyKingSkill
-from src.skills.skill_self_evolution import SkillSelfEvolution
-from src.skills.weather_advisory_skill import WeatherAdvisorySkill
-from src.skills.file_governance_skill import FileGovernanceSkill
-from src.skills.deep_research_skill import DeepResearchSkill
-from src.skills.memory_governance_skill import MemoryGovernanceSkill
-from src.skills.scheduling_skill import SchedulingSkill
+from src.skills.skill_pack import load_claude_skill_pack_from_dir
 from src.utils.config import LLMConfig
 from langchain_core.tools import BaseTool
 import importlib
@@ -40,10 +35,7 @@ class CapabilityManager:
         # 1. 注册内置法宝 (Tools)
         self._register_builtin_tools()
         
-        # 2. 注册内置神通 (Skills)
-        self._register_builtin_skills()
-        
-        # 特殊法宝：法宝配置管理器
+        # 2. 特殊法宝：法宝配置管理器
         config_manager = ToolConfigManagerTool()
         self.register_tool(config_manager)
         
@@ -74,14 +66,6 @@ class CapabilityManager:
         installer._tool_manager = self
         self.register_tool(installer)
 
-    def _register_builtin_skills(self):
-        self.register_skill(SkillSelfEvolution())
-        self.register_skill(WeatherAdvisorySkill())
-        self.register_skill(FileGovernanceSkill())
-        self.register_skill(DeepResearchSkill())
-        self.register_skill(MemoryGovernanceSkill())
-        self.register_skill(SchedulingSkill())
-
     def register_tool(self, tool: BaseMonkeyKingTool):
         """注册一个新法宝"""
         if any(t.name == tool.name for t in self.tools):
@@ -108,28 +92,55 @@ class CapabilityManager:
 
     def get_skills_prompt(self) -> str:
         """获取所有已注册神通的 SOP 描述，用于注入 System Prompt"""
+        return self.get_skills_prompt_for_query("")
+
+    def get_skills_prompt_for_query(self, query: str) -> str:
+        """
+        按 query 选择性注入技能：
+        - Claude 风格技能包：按匹配动态激活 + 按需拼接 references
+        - 传统 Python Skill：始终注入
+        """
         if not self.skills:
             return ""
-        
-        prompt = "\n=== 已点亮的神通 (Skills) ===\n"
+
+        selected: List[BaseMonkeyKingSkill] = []
+        q = query or ""
         for skill in self.skills:
+            matcher = getattr(skill, "matches_query", None)
+            if callable(matcher):
+                if matcher(q):
+                    selected.append(skill)
+                continue
+            selected.append(skill)
+
+        if not selected:
+            return ""
+
+        prompt = "\n=== 已点亮的神通 (Skills) ===\n"
+        for skill in selected:
             prompt += f"【{skill.name}】: {skill.description}\n"
-            prompt += f"SOP 指南：\n{skill.sop}\n"
+            renderer = getattr(skill, "render_for_query", None)
+            sop_content = renderer(q) if callable(renderer) else skill.sop
+            prompt += f"SOP 指南：\n{sop_content}\n"
             if skill.required_tools:
                 prompt += f"依赖法宝: {', '.join(skill.required_tools)}\n"
             prompt += "---\n"
         return prompt
 
     def _load_installed_capabilities(self):
-        """扫描内置和用户主目录下的 tools 和 skills 目录并加载"""
+        """扫描内置与用户目录能力并加载"""
         # 1. 加载内置法宝 (src/tools)
         self._load_from_dir(Path(__file__).parent, "src.tools")
+
+        # 2. 加载代码目录中的内置 Skill Packs (src/skills/skillpacks)
+        builtin_skillpacks_dir = Path(__file__).parent.parent / "skills" / "skillpacks"
+        self._load_skills_from_dir(builtin_skillpacks_dir)
         
-        # 2. 加载用户主目录下的法宝 (~/.monkeyking/tools)
+        # 3. 加载用户主目录下的法宝 (~/.monkeyking/tools)
         if LLMConfig.TOOLS_DIR.exists():
             self._load_from_dir(LLMConfig.TOOLS_DIR, "external_tools")
 
-        # 3. 加载用户主目录下的神通 (~/.monkeyking/skills)
+        # 4. 加载用户主目录下的神通 (~/.monkeyking/skills)
         if LLMConfig.SKILLS_DIR.exists():
             self._load_skills_from_dir(LLMConfig.SKILLS_DIR)
 
@@ -167,12 +178,22 @@ class CapabilityManager:
                 print(f"加载法宝模块 {module_name} 失败: {e}")
 
     def _load_skills_from_dir(self, directory: Path):
-        """扫描目录并加载 BaseMonkeyKingSkill (每个 skill 一个目录)"""
+        """扫描目录并加载 Skill（Claude SKILL.md 优先，其次 Python 类）"""
+        if not directory.exists():
+            return
+
         if str(directory) not in sys.path:
             sys.path.append(str(directory))
 
         for skill_dir in directory.iterdir():
             if skill_dir.is_dir():
+                # 1) 优先加载 Claude/OpenClaw 风格 SKILL.md 技能包
+                claude_pack = load_claude_skill_pack_from_dir(skill_dir)
+                if claude_pack:
+                    self.register_skill(claude_pack)
+                    continue
+
+                # 2) 回退到旧版 Python Skill 动态加载
                 # 寻找目录下的 .py 文件
                 for file in skill_dir.glob("*.py"):
                     if file.name == "__init__.py": continue

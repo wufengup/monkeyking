@@ -55,7 +55,7 @@ class AssistantAgent(BaseAgent):
         if hasattr(self, "system_prompt_content"):
             self._update_system_prompt()
 
-    def _update_system_prompt(self):
+    def _update_system_prompt(self, query: str = ""):
         """更新系统提示词，包含灵魂描述、长期记忆和神通 SOP"""
         self.system_prompt_content = (
             f"你是一个名为 {self.name} 的个人生活助理 Agent。\n\n"
@@ -65,8 +65,8 @@ class AssistantAgent(BaseAgent):
         if self.soul_description:
             self.system_prompt_content += f"关于你的灵魂定义与行为准则：\n{self.soul_description}\n\n"
         
-        # 动态注入已点亮的神通 (Skills)
-        skills_prompt = self.capability_manager.get_skills_prompt()
+        # 动态注入已点亮的神通 (Skills)，支持按 query 激活
+        skills_prompt = self.capability_manager.get_skills_prompt_for_query(query)
         if skills_prompt:
             self.system_prompt_content += f"{skills_prompt}\n"
 
@@ -100,6 +100,8 @@ class AssistantAgent(BaseAgent):
         try:
             # 1. 记录用户输入到 Session
             self._append_to_session("User", query)
+            # 1.1 按当前 query 更新一次系统提示词（激活匹配的 skills）
+            self._update_system_prompt(query=query)
             
             # 2. 构建初始消息列表 (包含上下文)
             messages = [SystemMessage(content=self.system_prompt_content)]

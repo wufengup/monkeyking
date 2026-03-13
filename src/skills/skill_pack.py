@@ -1,0 +1,251 @@
+import ast
+import re
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+from src.skills.base_skill import BaseMonkeyKingSkill
+
+
+def _safe_read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except Exception:
+        return ""
+
+
+def _split_frontmatter(raw_text: str) -> Tuple[Dict[str, Any], str]:
+    """
+    解析 SKILL.md 的 YAML frontmatter（轻量实现）：
+    - 支持 key: value
+    - 支持 key: [a, b]
+    - 支持:
+      key:
+        - a
+        - b
+    """
+    if not raw_text.startswith("---\n"):
+        return {}, raw_text
+
+    end = raw_text.find("\n---\n", 4)
+    if end == -1:
+        return {}, raw_text
+
+    frontmatter_text = raw_text[4:end]
+    body = raw_text[end + 5 :]
+
+    data: Dict[str, Any] = {}
+    current_key: Optional[str] = None
+    for line in frontmatter_text.splitlines():
+        if not line.strip():
+            continue
+
+        if line.startswith("  - ") and current_key:
+            value = line[4:].strip().strip('"').strip("'")
+            existing = data.get(current_key)
+            if not isinstance(existing, list):
+                existing = []
+            existing.append(value)
+            data[current_key] = existing
+            continue
+
+        if ":" not in line:
+            continue
+
+        key, value = line.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        current_key = key
+
+        if not value:
+            data[key] = []
+            continue
+
+        if value.startswith("[") and value.endswith("]"):
+            try:
+                parsed = ast.literal_eval(value)
+                data[key] = parsed if isinstance(parsed, list) else [str(parsed)]
+            except Exception:
+                data[key] = [x.strip() for x in value[1:-1].split(",") if x.strip()]
+            continue
+
+        data[key] = value.strip('"').strip("'")
+
+    return data, body
+
+
+def _extract_reference_paths(body: str) -> List[str]:
+    """
+    提取 markdown 链接中的相对路径作为 references（只收本地文件）。
+    """
+    refs: List[str] = []
+    for match in re.findall(r"\[[^\]]+\]\(([^)]+)\)", body):
+        target = match.strip()
+        if target.startswith("http://") or target.startswith("https://") or target.startswith("#"):
+            continue
+        refs.append(target)
+    # 去重保序
+    seen = set()
+    ordered: List[str] = []
+    for ref in refs:
+        if ref not in seen:
+            seen.add(ref)
+            ordered.append(ref)
+    return ordered
+
+
+def _tokenize(text: str) -> List[str]:
+    """
+    轻量分词：
+    - 英文/数字按连续词切分
+    - 中文连续片段额外展开为 2~3 字 ngram，提升“政策变化/最新消息”类匹配召回
+    """
+    raw_chunks = re.findall(r"[A-Za-z0-9_\-]+|[\u4e00-\u9fff]+", text.lower())
+    tokens: List[str] = []
+    for chunk in raw_chunks:
+        if re.fullmatch(r"[\u4e00-\u9fff]+", chunk):
+            if len(chunk) >= 2:
+                tokens.append(chunk)
+            for n in (2, 3):
+                if len(chunk) < n:
+                    continue
+                for i in range(0, len(chunk) - n + 1):
+                    tokens.append(chunk[i : i + n])
+        else:
+            if len(chunk) >= 2:
+                tokens.append(chunk)
+
+    # 去重保序
+    seen = set()
+    out: List[str] = []
+    for token in tokens:
+        if token not in seen:
+            seen.add(token)
+            out.append(token)
+    return out
+
+
+class ClaudeStyleSkillPack(BaseMonkeyKingSkill):
+    """
+    Claude/OpenClaw 风格技能包：
+    - 目录内以 SKILL.md 为主入口
+    - frontmatter 提供 name/description
+    - body 作为 workflow instructions
+    - references 按 query 按需加载
+    """
+
+    skill_pack_type = "claude"
+
+    def __init__(self, pack_dir: Path, metadata: Dict[str, Any], body: str):
+        self._pack_dir = pack_dir
+        self._metadata = metadata
+        self._body = body.strip()
+        self._refs = [Path(pack_dir / p).resolve() for p in _extract_reference_paths(body)]
+        self._hint_terms = self._build_hint_terms()
+
+    def _build_hint_terms(self) -> List[str]:
+        terms = _tokenize(f"{self.name} {self.description}")
+        for line in self._body.splitlines():
+            low = line.lower()
+            if "trigger" in low or "触发" in line:
+                terms.extend(_tokenize(line))
+        explicit = self._metadata.get("triggers") or self._metadata.get("keywords") or []
+        if isinstance(explicit, list):
+            for item in explicit:
+                terms.extend(_tokenize(str(item)))
+        # 去重保序
+        seen = set()
+        out: List[str] = []
+        for t in terms:
+            if t not in seen:
+                seen.add(t)
+                out.append(t)
+        return out
+
+    @property
+    def name(self) -> str:
+        return str(self._metadata.get("name", self._pack_dir.name))
+
+    @property
+    def description(self) -> str:
+        return str(self._metadata.get("description", "Claude style skill pack"))
+
+    @property
+    def required_tools(self) -> List[str]:
+        raw = self._metadata.get("required_tools", [])
+        if isinstance(raw, list):
+            return [str(x) for x in raw if str(x).strip()]
+        return []
+
+    @property
+    def sop(self) -> str:
+        # 兼容旧接口：不带 query 时输出正文，不展开 references
+        return self._body
+
+    def matches_query(self, query: str) -> bool:
+        if not query.strip():
+            return True
+        q_tokens = set(_tokenize(query))
+        if not q_tokens:
+            return False
+        overlap = sum(1 for t in self._hint_terms if t in q_tokens)
+        return overlap > 0
+
+    def _select_reference_context(self, query: str, budget_chars: int = 2400) -> str:
+        if not query.strip() or not self._refs:
+            return ""
+
+        q_tokens = set(_tokenize(query))
+        candidates: List[Tuple[int, Path, str]] = []
+        for ref in self._refs:
+            content = _safe_read_text(ref)
+            if not content:
+                continue
+            head = content[:800]
+            text_for_score = f"{ref.name} {head}"
+            score = sum(1 for t in q_tokens if t in text_for_score.lower())
+            candidates.append((score, ref, content))
+
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        picked: List[str] = []
+        used = 0
+        for score, ref, content in candidates:
+            if score <= 0:
+                continue
+            chunk = content[:1200]
+            block = f"\n[Reference: {ref}]\n{chunk}\n"
+            if used + len(block) > budget_chars:
+                break
+            picked.append(block)
+            used += len(block)
+
+        return "".join(picked)
+
+    def render_for_query(self, query: str) -> str:
+        prompt = self._body
+        ref_ctx = self._select_reference_context(query=query)
+        if ref_ctx:
+            prompt += "\n\n参考资料（按需加载）：\n" + ref_ctx
+        return prompt
+
+
+def load_claude_skill_pack_from_dir(pack_dir: Path) -> Optional[ClaudeStyleSkillPack]:
+    """
+    从目录中加载 Claude 风格技能包：
+    - 入口文件：SKILL.md
+    - 优先使用 frontmatter 的 name/description
+    """
+    skill_md = pack_dir / "SKILL.md"
+    if not skill_md.exists():
+        return None
+
+    raw = _safe_read_text(skill_md)
+    if not raw.strip():
+        return None
+
+    metadata, body = _split_frontmatter(raw)
+    if not metadata.get("name"):
+        metadata["name"] = pack_dir.name
+    if not metadata.get("description"):
+        metadata["description"] = "Claude style skill pack"
+
+    return ClaudeStyleSkillPack(pack_dir=pack_dir, metadata=metadata, body=body)

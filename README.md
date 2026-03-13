@@ -21,12 +21,12 @@
 >    - `web_search`：火眼金睛，洞察全网实时资讯。
 >    - `tool_config_manager`：打理百宝箱，管理各项 API 密钥。
 > 2. **进阶神通（Skills）**：
->    - **灵猴自进化** (`SkillSelfEvolution`)：俺能自己写代码、炼制新法宝。
->    - **气象洞察** (`WeatherAdvisorySkill`)：不仅能查天气，还能给你穿衣建议。
->    - **文件治理** (`FileGovernanceSkill`)：帮你整理乱糟糟的文件夹。
->    - **深度调研** (`DeepResearchSkill`)：针对复杂问题进行全网深挖。
->    - **记忆治理** (`MemoryGovernanceSkill`)：帮俺梳理咱俩的陈年旧账。
->    - **任务调度** (`SchedulingSkill`)：帮主人记挂着待办事项，绝不误事！
+>    - **灵猴自进化** (`skill-self-evolution`)：俺能自己写代码、炼制新法宝。
+>    - **气象洞察** (`weather-advisory`)：不仅能查天气，还能给你穿衣建议。
+>    - **文件治理** (`file-governance`)：帮你整理乱糟糟的文件夹。
+>    - **深度调研** (`deep-research`)：针对复杂问题进行全网深挖。
+>    - **记忆治理** (`memory-governance`)：帮俺梳理咱俩的陈年旧账。
+>    - **任务调度** (`scheduling`)：帮主人记挂着待办事项，绝不误事！
 > 3. **三界通传（Channels）**：
 >    - **飞书集成**：通过飞书机器人与大圣即时对话。
 >    - **多渠道扩展**：支持未来集成钉钉等其他办公平台。
@@ -125,3 +125,54 @@ monkeyking agent
 
 - **查看版本**：`monkeyking version`
 - **强制重置配置**：`monkeyking init --force`
+
+---
+
+## 🧩 Claude/OpenClaw 风格 Skill Pack（新增）
+
+为了与 Claude / OpenClaw 的 skill 生态对齐，MonkeyKing 现在支持以 `SKILL.md` 为核心入口的技能包：
+
+### 目录约定
+
+Skill Pack 支持两层来源：
+
+- **内置 Skill（代码目录）**：`src/skills/skillpacks/<pack_name>/SKILL.md`
+- **安装 Skill（用户目录）**：`~/.monkeyking/skills/<pack_name>/SKILL.md`
+
+最小结构（推荐）：
+
+```text
+src/skills/skillpacks/
+  └── news-brief/
+      ├── SKILL.md
+      └── references/
+          └── output-template.md
+
+~/.monkeyking/skills/
+  └── openclaw-research/
+      ├── SKILL.md
+      └── references/
+          └── source-quality.md
+```
+
+### `SKILL.md` 结构
+
+建议包含 frontmatter：
+- `name`（必填）
+- `description`（必填）
+- `triggers`（可选）
+- `required_tools`（可选）
+
+正文作为技能工作流说明（workflow/SOP），可在正文中通过 Markdown 链接引用 `references/` 下的资料。
+
+系统行为：
+- 启动时自动加载 `src/skills/skillpacks/*/SKILL.md`（内置）和 `~/.monkeyking/skills/*/SKILL.md`（用户安装）
+- 每次用户提问时按 query 动态激活匹配技能
+- 仅对命中技能按需加载引用的 references 内容并注入提示词
+
+### 与旧版 Skill 的兼容关系
+
+- 新版优先级：`SKILL.md` > Python `BaseMonkeyKingSkill`
+- `skill.json` 已移除，不再加载
+
+这意味着你可以渐进迁移，不需要一次性重写全部技能。
