@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage, AI
 from src.utils.config import LLMConfig
 from src.tools.manager import CapabilityManager
 from src.utils.cli import print_tool_execution, print_thought, ask_for_intervention, show_thinking
+from src.agents.callback import AgentCallback
 import os
 import json
 import threading
@@ -17,7 +18,10 @@ class AssistantAgent(BaseAgent):
         # 0. 确保基础配置目录和路径已初始化
         LLMConfig.ensure_config_exists()
         
-        # 1. 初始化模型参数
+        # 1. 初始化锁，确保多线程下 Session 安全
+        self._session_lock = threading.Lock()
+        
+        # 2. 初始化模型参数
         self.llm_params = model_params or LLMConfig.get_llm_params()
         
         # 2. 初始化能力管理器（先不设置回调，避免循环引用）
@@ -78,13 +82,14 @@ class AssistantAgent(BaseAgent):
             "7. 始终保持‘俺老孙’的语气，展现你的远见和智慧。\n"
             "8. **诚实面对局限**：如果你缺乏对应的法宝或神通来完成任务，请直接告诉用户你目前做不到，并建议炼制新法宝。绝对禁止做出虚假承诺。\n"
             "9. **严禁脑补结果**：在调用法宝（Tool）之前，绝对禁止在回复中假定法宝已经成功执行（例如说‘我已经为你设置好了’）。你必须先施展法宝，根据法宝返回的真实结果，再向主人汇报。\n"
-            "10. **情感表达**：请根据对话内容表现出你的喜怒哀乐。并在输出答案的最开头，使用格式 `[MOOD:情绪]` 标明你当前的情绪状态（可选情绪：happy, angry, sad, neutral, excited）。例如：`[MOOD:happy] 哈哈，大圣来也！`。\n\n"
+            "10. **关注系统通知**：如果对话历史中出现了以 `[提示]` 或 `[错误]` 开头的系统通知（System 消息），说明你的分身在执行任务或操作界面时遇到了意外。你必须在回复中诚实地告知主人发生了什么，并视情况致歉。\n"
+            "11. **情感表达**：请根据对话内容表现出你的喜怒哀乐。并在输出答案的最开头，使用格式 `[MOOD:情绪]` 标明你当前的情绪状态（可选情绪：happy, angry, sad, neutral, excited）。例如：`[MOOD:happy] 哈哈，大圣来也！`。\n\n"
         )
 
         if self.long_term_memory:
             self.system_prompt_content += f"关于用户的长期记忆（包含日期信息）：\n{self.long_term_memory}\n"
 
-    def run(self, input_data: Dict[str, Any], is_interactive: bool = False) -> str:
+    def run(self, input_data: Dict[str, Any], is_interactive: bool = False, callback: Optional[AgentCallback] = None) -> str:
         """
         处理用户请求，支持多轮 Tool 调用、思考展示及人工干预。
         """
@@ -105,6 +110,8 @@ class AssistantAgent(BaseAgent):
                 content = msg["content"]
                 if role == "User":
                     messages.append(HumanMessage(content=content))
+                elif role == "System":
+                    messages.append(SystemMessage(content=f"系统通知：{content}"))
                 elif role == "MonkeyKing":
                     # 检查是否是结构化的工具调用记录
                     if content.startswith("[Tool Call]"):
@@ -180,6 +187,8 @@ class AssistantAgent(BaseAgent):
                 # 如果有工具调用，说明 LLM 正在规划行动
                 # 此时打印 AI 的思考内容和即将调用的法宝
                 print_thought(self.name, response.content, response.tool_calls)
+                if callback:
+                    callback.on_thought(response.content)
                 
                 # 在执行工具前，如果是交互模式，询问用户是否干预
                 if is_interactive:
@@ -204,6 +213,9 @@ class AssistantAgent(BaseAgent):
                     tool_name = tool_call["name"]
                     tool_args = tool_call["args"]
                     
+                    if callback:
+                        callback.on_tool_start(tool_name, tool_args)
+                    
                     # 查找并执行工具
                     try:
                         selected_tool = next((t for t in self.tools if t.name == tool_name), None)
@@ -213,6 +225,9 @@ class AssistantAgent(BaseAgent):
                             tool_result = f"错误：未找到名为 '{tool_name}' 的工具。"
                     except Exception as te:
                         tool_result = f"执行工具 '{tool_name}' 时发生异常: {str(te)}"
+                    
+                    if callback:
+                        callback.on_tool_end(tool_name, tool_result)
                     
                     # 使用专门的对话框展示工具执行过程和结果
                     print_tool_execution(tool_name, tool_args, tool_result)
@@ -237,8 +252,12 @@ class AssistantAgent(BaseAgent):
             return "抱歉，由于对话轮数过多，任务被迫终止。"
             
         except Exception as e:
+            if callback:
+                callback.on_error(e)
             self.last_mood = "sad"
-            return f"抱歉，我目前处理请求时遇到了一点问题: {str(e)}"
+            error_msg = f"抱歉，我目前处理请求时遇到了一点问题: {str(e)}"
+            self._append_to_session("MonkeyKing", error_msg)
+            return error_msg
 
     def trigger_memory_consolidation(self, reason: str) -> bool:
         """异步触发记忆整理"""
@@ -344,17 +363,20 @@ class AssistantAgent(BaseAgent):
         return []
 
     def _append_to_session(self, role: str, content: str):
-        """将交互记录追加到 session.json"""
+        """将交互记录追加到 session.json (线程安全)"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         entry = {
             "time": timestamp,
             "role": role,
             "content": content
         }
-        self.current_session.append(entry)
         
-        try:
-            with open(LLMConfig.SESSION_PATH, "w", encoding="utf-8") as f:
-                json.dump(self.current_session, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"无法保存 Session 记录: {e}")
+        with self._session_lock:
+            self.current_session.append(entry)
+            try:
+                # 显式使用 absolute 路径并记录日志
+                session_path = LLMConfig.SESSION_PATH
+                with open(session_path, "w", encoding="utf-8") as f:
+                    json.dump(self.current_session, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                print(f"无法保存 Session 记录到 {LLMConfig.SESSION_PATH}: {e}")
