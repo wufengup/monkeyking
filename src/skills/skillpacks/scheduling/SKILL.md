@@ -1,13 +1,6 @@
 ---
 name: scheduling
 description: 安排未来时刻的提醒或自动化任务，并管理任务清单的能力。
-triggers:
-  - 提醒我
-  - 定时
-  - 明天
-  - 今晚
-  - 任务清单
-required_tools: [schedule_task, list_tasks, manage_task]
 ---
 
 # Scheduling
@@ -21,6 +14,9 @@ required_tools: [schedule_task, list_tasks, manage_task]
 3. 调用 `schedule_task` 创建任务。
 4. 用户查看时调用 `list_tasks`，管理时调用 `manage_task`。
 5. 回复中明确任务 ID 与执行时间。
+
+## Tooling
+- 主要使用：`schedule_task`、`list_tasks`、`manage_task`
 
 ## Constraints
 - 时间表达不清晰时先澄清或说明默认假设。

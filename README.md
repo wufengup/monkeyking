@@ -160,10 +160,8 @@ src/skills/skillpacks/
 建议包含 frontmatter：
 - `name`（必填）
 - `description`（必填）
-- `triggers`（可选）
-- `required_tools`（可选）
 
-正文作为技能工作流说明（workflow/SOP），可在正文中通过 Markdown 链接引用 `references/` 下的资料。
+正文作为技能工作流说明（workflow/SOP），可包含 `Trigger`、`Workflow`、`Tooling`、`Constraints` 等章节；并可通过 Markdown 链接引用 `references/` 下的资料。
 
 系统行为：
 - 启动时自动加载 `src/skills/skillpacks/*/SKILL.md`（内置）和 `~/.monkeyking/skills/*/SKILL.md`（用户安装）

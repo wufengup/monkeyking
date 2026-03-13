@@ -1,4 +1,3 @@
-import ast
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -15,13 +14,9 @@ def _safe_read_text(path: Path) -> str:
 
 def _split_frontmatter(raw_text: str) -> Tuple[Dict[str, Any], str]:
     """
-    解析 SKILL.md 的 YAML frontmatter（轻量实现）：
-    - 支持 key: value
-    - 支持 key: [a, b]
-    - 支持:
-      key:
-        - a
-        - b
+    解析 SKILL.md 的 YAML frontmatter（原生风格最小子集）：
+    - 仅解析扁平的 key: value
+    - 主要使用 name / description
     """
     if not raw_text.startswith("---\n"):
         return {}, raw_text
@@ -34,18 +29,8 @@ def _split_frontmatter(raw_text: str) -> Tuple[Dict[str, Any], str]:
     body = raw_text[end + 5 :]
 
     data: Dict[str, Any] = {}
-    current_key: Optional[str] = None
     for line in frontmatter_text.splitlines():
         if not line.strip():
-            continue
-
-        if line.startswith("  - ") and current_key:
-            value = line[4:].strip().strip('"').strip("'")
-            existing = data.get(current_key)
-            if not isinstance(existing, list):
-                existing = []
-            existing.append(value)
-            data[current_key] = existing
             continue
 
         if ":" not in line:
@@ -54,20 +39,6 @@ def _split_frontmatter(raw_text: str) -> Tuple[Dict[str, Any], str]:
         key, value = line.split(":", 1)
         key = key.strip()
         value = value.strip()
-        current_key = key
-
-        if not value:
-            data[key] = []
-            continue
-
-        if value.startswith("[") and value.endswith("]"):
-            try:
-                parsed = ast.literal_eval(value)
-                data[key] = parsed if isinstance(parsed, list) else [str(parsed)]
-            except Exception:
-                data[key] = [x.strip() for x in value[1:-1].split(",") if x.strip()]
-            continue
-
         data[key] = value.strip('"').strip("'")
 
     return data, body
@@ -148,10 +119,6 @@ class ClaudeStyleSkillPack(BaseMonkeyKingSkill):
             low = line.lower()
             if "trigger" in low or "触发" in line:
                 terms.extend(_tokenize(line))
-        explicit = self._metadata.get("triggers") or self._metadata.get("keywords") or []
-        if isinstance(explicit, list):
-            for item in explicit:
-                terms.extend(_tokenize(str(item)))
         # 去重保序
         seen = set()
         out: List[str] = []
@@ -171,9 +138,6 @@ class ClaudeStyleSkillPack(BaseMonkeyKingSkill):
 
     @property
     def required_tools(self) -> List[str]:
-        raw = self._metadata.get("required_tools", [])
-        if isinstance(raw, list):
-            return [str(x) for x in raw if str(x).strip()]
         return []
 
     @property

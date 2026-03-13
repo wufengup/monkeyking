@@ -1,12 +1,6 @@
 ---
 name: skill-self-evolution
 description: 当现有法宝不足以解决用户问题时，自主编写并安装新法宝的能力。
-triggers:
-  - 新能力
-  - 新工具
-  - 没有对应法宝
-  - 自动安装
-required_tools: [skill_installer]
 ---
 
 # Skill Self Evolution
@@ -21,6 +15,9 @@ required_tools: [skill_installer]
 3. 代码约束：新法宝必须继承 `BaseMonkeyKingTool`，并通过 `StructuredTool.from_function` 暴露。
 4. 安装执行：调用 `skill_installer` 写入并安装新法宝。
 5. 立即验证：安装后立刻调用新法宝，回到用户原始任务并闭环。
+
+## Tooling
+- 主要使用：`skill_installer`
 
 ## Constraints
 - 严禁 mock 实现，必须包含真实执行逻辑。

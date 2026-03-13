@@ -1,16 +1,6 @@
 ---
 name: news-brief
 description: 面向时效信息的快报技能包，适用于新闻、政策、公告、比赛结果等任务。
-triggers:
-  - 最新
-  - 今天
-  - 刚刚
-  - 近期变化
-  - 价格
-  - 法规
-  - 公司人事
-  - 比赛结果
-required_tools: [web_search]
 ---
 
 # News Brief Skill
@@ -24,6 +14,9 @@ required_tools: [web_search]
 2. 优先汇总来源更权威且发布日期更新的结果。
 3. 如果来源冲突，明确冲突点并给出倾向性判断。
 4. 输出中必须包含事件时间、影响范围和用户可执行建议。
+
+## Tooling
+- 主要使用：`web_search`
 
 ## Constraints
 - 禁止在检索前假设“最新结论”。
