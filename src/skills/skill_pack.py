@@ -99,34 +99,43 @@ class ClaudeStyleSkillPack(BaseMonkeyKingSkill):
     """
     Claude/OpenClaw 风格技能包：
     - 目录内以 SKILL.md 为主入口
-    - frontmatter 提供 name/description
-    - body 作为 workflow instructions
-    - references 按 query 按需加载
+    - frontmatter 提供 name/description (启动时加载)
+    - body/references/scripts 仅在需要时延迟加载
     """
 
     skill_pack_type = "claude"
 
-    def __init__(self, pack_dir: Path, metadata: Dict[str, Any], body: str):
+    def __init__(self, pack_dir: Path, metadata: Dict[str, Any]):
         self._pack_dir = pack_dir
         self._metadata = metadata
-        self._body = body.strip()
-        self._refs = [Path(pack_dir / p).resolve() for p in _extract_reference_paths(body)]
-        self._hint_terms = self._build_hint_terms()
+        self._body: Optional[str] = None
+        self._refs: Optional[List[Path]] = None
+        self._hint_terms: Optional[List[str]] = None
+        self._loaded = False
+        self._on_load_callback = None
 
-    def _build_hint_terms(self) -> List[str]:
-        terms = _tokenize(f"{self.name} {self.description}")
-        for line in self._body.splitlines():
-            low = line.lower()
-            if "trigger" in low or "触发" in line:
-                terms.extend(_tokenize(line))
-        # 去重保序
-        seen = set()
-        out: List[str] = []
-        for t in terms:
-            if t not in seen:
-                seen.add(t)
-                out.append(t)
-        return out
+    def _ensure_loaded(self):
+        """延迟加载正文、参考资料和脚本"""
+        if self._loaded:
+            return
+        
+        skill_md = self._pack_dir / "SKILL.md"
+        raw = _safe_read_text(skill_md)
+        _, body = _split_frontmatter(raw)
+        self._body = body.strip()
+        self._refs = [Path(self._pack_dir / p).resolve() for p in _extract_reference_paths(self._body)]
+        
+        # 通知管理器加载脚本 (scripts 目录)
+        if self._on_load_callback:
+            self._on_load_callback(self._pack_dir)
+            
+        self._loaded = True
+
+    def _get_hint_terms(self) -> List[str]:
+        if self._hint_terms is None:
+            # 基础匹配词项：仅使用名称和描述，避免启动时加载大文件
+            self._hint_terms = _tokenize(f"{self.name} {self.description}")
+        return self._hint_terms
 
     @property
     def name(self) -> str:
@@ -137,12 +146,8 @@ class ClaudeStyleSkillPack(BaseMonkeyKingSkill):
         return str(self._metadata.get("description", "Claude style skill pack"))
 
     @property
-    def required_tools(self) -> List[str]:
-        return []
-
-    @property
     def sop(self) -> str:
-        # 兼容旧接口：不带 query 时输出正文，不展开 references
+        self._ensure_loaded()
         return self._body
 
     def matches_query(self, query: str) -> bool:
@@ -151,10 +156,12 @@ class ClaudeStyleSkillPack(BaseMonkeyKingSkill):
         q_tokens = set(_tokenize(query))
         if not q_tokens:
             return False
-        overlap = sum(1 for t in self._hint_terms if t in q_tokens)
+        # 基于名称和描述进行初步匹配
+        overlap = sum(1 for t in self._get_hint_terms() if t in q_tokens)
         return overlap > 0
 
     def _select_reference_context(self, query: str, budget_chars: int = 2400) -> str:
+        self._ensure_loaded()
         if not query.strip() or not self._refs:
             return ""
 
@@ -185,6 +192,7 @@ class ClaudeStyleSkillPack(BaseMonkeyKingSkill):
         return "".join(picked)
 
     def render_for_query(self, query: str) -> str:
+        self._ensure_loaded()
         prompt = self._body
         ref_ctx = self._select_reference_context(query=query)
         if ref_ctx:
@@ -194,9 +202,9 @@ class ClaudeStyleSkillPack(BaseMonkeyKingSkill):
 
 def load_claude_skill_pack_from_dir(pack_dir: Path) -> Optional[ClaudeStyleSkillPack]:
     """
-    从目录中加载 Claude 风格技能包：
+    从目录中仅加载元数据（延迟加载正文）：
     - 入口文件：SKILL.md
-    - 优先使用 frontmatter 的 name/description
+    - 仅解析 frontmatter 的 name/description
     """
     skill_md = pack_dir / "SKILL.md"
     if not skill_md.exists():
@@ -206,10 +214,11 @@ def load_claude_skill_pack_from_dir(pack_dir: Path) -> Optional[ClaudeStyleSkill
     if not raw.strip():
         return None
 
-    metadata, body = _split_frontmatter(raw)
+    # 仅解析元数据
+    metadata, _ = _split_frontmatter(raw)
     if not metadata.get("name"):
         metadata["name"] = pack_dir.name
     if not metadata.get("description"):
         metadata["description"] = "Claude style skill pack"
 
-    return ClaudeStyleSkillPack(pack_dir=pack_dir, metadata=metadata, body=body)
+    return ClaudeStyleSkillPack(pack_dir=pack_dir, metadata=metadata)

@@ -21,7 +21,7 @@
 >    - `web_search`：火眼金睛，洞察全网实时资讯。
 >    - `tool_config_manager`：打理百宝箱，管理各项 API 密钥。
 > 2. **进阶神通（Skills）**：
->    - **灵猴自进化** (`skill-self-evolution`)：俺能自己写代码、炼制新法宝。
+>    - **灵猴自进化** (`skill-creator`)：俺能自己写代码、炼制新法宝。
 >    - **气象洞察** (`weather-advisory`)：不仅能查天气，还能给你穿衣建议。
 >    - **文件治理** (`file-governance`)：帮你整理乱糟糟的文件夹。
 >    - **深度调研** (`deep-research`)：针对复杂问题进行全网深挖。
@@ -161,7 +161,7 @@ src/skills/skillpacks/
 - `name`（必填）
 - `description`（必填）
 
-正文作为技能工作流说明（workflow/SOP），可包含 `Trigger`、`Workflow`、`Tooling`、`Constraints` 等章节；并可通过 Markdown 链接引用 `references/` 下的资料。
+正文作为技能工作流说明（workflow/SOP），可包含 `When to use`、`Workflow`、`Tooling`、`Constraints` 等章节；并可通过 Markdown 链接引用 `references/` 下的资料。
 
 系统行为：
 - 启动时自动加载 `src/skills/skillpacks/*/SKILL.md`（内置）和 `~/.monkeyking/skills/*/SKILL.md`（用户安装）

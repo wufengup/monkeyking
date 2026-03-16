@@ -5,7 +5,7 @@ description: 安全审计、规范管理及文件生命周期维护的能力。
 
 # File Governance
 
-## Trigger
+## When to use
 - 用户要求读取、写入、创建、整理本地文件或目录。
 
 ## Workflow

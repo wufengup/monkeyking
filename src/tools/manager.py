@@ -4,7 +4,6 @@ from src.tools.file_reader import FileReaderTool
 from src.tools.directory_lister import DirectoryListerTool
 from src.tools.directory_creator import DirectoryCreatorTool
 from src.tools.file_writer import FileWriterTool
-from src.tools.skill_installer import SkillInstallerTool
 from src.tools.tool_config_manager import ToolConfigManagerTool
 from src.tools.web_search import WebSearchTool
 from src.tools.memory_consolidation import MemoryConsolidationTool
@@ -60,11 +59,6 @@ class CapabilityManager:
         # 特殊法宝：记忆整理器
         self.memory_tool = MemoryConsolidationTool()
         self.register_tool(self.memory_tool)
-        
-        # 特殊法宝：技能安装器
-        installer = SkillInstallerTool()
-        installer._tool_manager = self
-        self.register_tool(installer)
 
     def register_tool(self, tool: BaseMonkeyKingTool):
         """注册一个新法宝"""
@@ -78,6 +72,11 @@ class CapabilityManager:
         """注册一个新神通"""
         if any(s.name == skill.name for s in self.skills):
             return
+        
+        # 如果是 Claude 风格技能包，设置延迟加载脚本的回调
+        if hasattr(skill, "_on_load_callback"):
+            skill._on_load_callback = self._load_tools_from_skill_scripts
+            
         self.skills.append(skill)
         if self.on_capability_added:
             self.on_capability_added()
@@ -97,34 +96,43 @@ class CapabilityManager:
     def get_skills_prompt_for_query(self, query: str) -> str:
         """
         按 query 选择性注入技能：
-        - Claude 风格技能包：按匹配动态激活 + 按需拼接 references
-        - 传统 Python Skill：始终注入
+        - 匹配的技能：加载完整上下文 (SOP, references, scripts)
+        - 未匹配的技能：仅展示名称和描述 (按用户要求减少上下文)
         """
         if not self.skills:
             return ""
 
-        selected: List[BaseMonkeyKingSkill] = []
+        matched: List[BaseMonkeyKingSkill] = []
+        others: List[BaseMonkeyKingSkill] = []
         q = query or ""
+        
         for skill in self.skills:
             matcher = getattr(skill, "matches_query", None)
-            if callable(matcher):
-                if matcher(q):
-                    selected.append(skill)
-                continue
-            selected.append(skill)
+            if callable(matcher) and matcher(q):
+                matched.append(skill)
+            else:
+                others.append(skill)
 
-        if not selected:
-            return ""
+        prompt = "\n=== 灵猴神通 (Skills) ===\n"
+        
+        # 1. 对于匹配的技能，加载完整上下文
+        if matched:
+            prompt += "\n[已激活的神通 - 包含详细 SOP]\n"
+            for skill in matched:
+                prompt += f"【{skill.name}】: {skill.description}\n"
+                renderer = getattr(skill, "render_for_query", None)
+                sop_content = renderer(q) if callable(renderer) else skill.sop
+                prompt += f"SOP 指南：\n{sop_content}\n"
+                if skill.required_tools:
+                    prompt += f"依赖法宝: {', '.join(skill.required_tools)}\n"
+                prompt += "---\n"
 
-        prompt = "\n=== 已点亮的神通 (Skills) ===\n"
-        for skill in selected:
-            prompt += f"【{skill.name}】: {skill.description}\n"
-            renderer = getattr(skill, "render_for_query", None)
-            sop_content = renderer(q) if callable(renderer) else skill.sop
-            prompt += f"SOP 指南：\n{sop_content}\n"
-            if skill.required_tools:
-                prompt += f"依赖法宝: {', '.join(skill.required_tools)}\n"
-            prompt += "---\n"
+        # 2. 对于未匹配的技能，仅展示名称和描述，方便 LLM 发现
+        if others:
+            prompt += "\n[可选神通 - 仅展示概览]\n"
+            for skill in others:
+                prompt += f"- {skill.name}: {skill.description}\n"
+        
         return prompt
 
     def _load_installed_capabilities(self):
@@ -144,6 +152,36 @@ class CapabilityManager:
         if LLMConfig.SKILLS_DIR.exists():
             self._load_skills_from_dir(LLMConfig.SKILLS_DIR)
 
+    def _load_tools_from_skill_scripts(self, skill_dir: Path):
+        """从技能包的 scripts 目录加载法宝"""
+        scripts_dir = skill_dir / "scripts"
+        if scripts_dir.exists() and scripts_dir.is_dir():
+            # 将项目根目录和 scripts 目录加入 sys.path 以便导入
+            project_root = str(Path(__file__).parent.parent.parent)
+            if project_root not in sys.path:
+                sys.path.append(project_root)
+            if str(scripts_dir) not in sys.path:
+                sys.path.append(str(scripts_dir))
+            
+            for file in scripts_dir.glob("*.py"):
+                if file.name == "__init__.py": continue
+                
+                module_name = f"skill_script_{skill_dir.name}_{file.stem}"
+                try:
+                    spec = importlib.util.spec_from_file_location(module_name, file)
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    
+                    for attr_name in dir(module):
+                        attr = getattr(module, attr_name)
+                        if isinstance(attr, type) and issubclass(attr, BaseMonkeyKingTool) and attr is not BaseMonkeyKingTool:
+                            instance = attr()
+                            if hasattr(instance, "_scheduler"):
+                                instance._scheduler = self.scheduler
+                            self.register_tool(instance)
+                except Exception as e:
+                    print(f"从技能脚本 {file} 加载法宝失败: {e}")
+
     def _load_from_dir(self, directory: Path, package_prefix: str):
         """通用加载逻辑：扫描目录并加载 BaseMonkeyKingTool"""
         # 如果加载外部目录，需要确保其在 sys.path 中
@@ -154,7 +192,8 @@ class CapabilityManager:
         for file in directory.glob("*.py"):
             if file.name in ["__init__.py", "base_tool.py", "manager.py", 
                             "file_reader.py", "directory_lister.py", 
-                            "directory_creator.py", "file_writer.py", "skill_installer.py",
+                            "directory_creator.py", "file_writer.py",
+                            "skill_creator.py",
                             "web_search.py", "memory_consolidation.py",
                             "tool_config_manager.py", "scheduling_tools.py"]:
                 continue
@@ -178,7 +217,7 @@ class CapabilityManager:
                 print(f"加载法宝模块 {module_name} 失败: {e}")
 
     def _load_skills_from_dir(self, directory: Path):
-        """扫描目录并加载 Skill（Claude SKILL.md 优先，其次 Python 类）"""
+        """扫描目录并加载 Skill（延迟加载）"""
         if not directory.exists():
             return
 
@@ -187,7 +226,7 @@ class CapabilityManager:
 
         for skill_dir in directory.iterdir():
             if skill_dir.is_dir():
-                # 1) 优先加载 Claude/OpenClaw 风格 SKILL.md 技能包
+                # 1) 优先加载 Claude/OpenClaw 风格 SKILL.md 技能包 (元数据模式)
                 claude_pack = load_claude_skill_pack_from_dir(skill_dir)
                 if claude_pack:
                     self.register_skill(claude_pack)
@@ -214,28 +253,3 @@ class CapabilityManager:
                                 self.register_skill(attr())
                     except Exception as e:
                         print(f"加载神通模块 {module_name} 失败: {e}")
-
-    def install_new_tool(self, file_name: str, code: str) -> str:
-        """持久化新法宝到主目录并加载"""
-        try:
-            LLMConfig.TOOLS_DIR.mkdir(parents=True, exist_ok=True)
-            file_path = LLMConfig.TOOLS_DIR / f"{file_name}.py"
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(code)
-            self._load_installed_capabilities()
-            return f"成功：法宝已炼成并保存至 {file_path}，当前已可施展。"
-        except Exception as e:
-            return f"炼制失败: {str(e)}"
-
-    def install_new_skill(self, skill_name: str, file_name: str, code: str) -> str:
-        """持久化新神通到主目录并加载 (每个 skill 独立目录)"""
-        try:
-            skill_path = LLMConfig.SKILLS_DIR / skill_name
-            skill_path.mkdir(parents=True, exist_ok=True)
-            file_path = skill_path / f"{file_name}.py"
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(code)
-            self._load_installed_capabilities()
-            return f"成功：神通已点亮并保存至 {file_path}，大圣已心领神会。"
-        except Exception as e:
-            return f"领悟失败: {str(e)}"

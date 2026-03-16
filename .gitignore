@@ -39,6 +39,7 @@ $RECYCLE.BIN
 *.njsproj
 *.sln
 *.bak
+.codex/
 
 # ===================== Python 项目相关 =====================
 # 字节码文件

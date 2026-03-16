@@ -76,7 +76,7 @@ class AssistantAgent(BaseAgent):
             "1. 面对复杂任务，先告知用户你的执行计划。\n"
             "2. 始终锁定用户的核心问题（最初的目标）。\n"
             "3. 如果在引导用户安装了新工具或技能后，必须先验证工具可用性，然后立即回归到最初的任务上并闭环解决它。\n"
-            "4. **严禁 Mock 工具**：你通过 `skill_installer` 安装的工具必须具备真实、有效的逻辑（如调用 API、执行指令、处理文件），绝对禁止只打印一个“成功”或返回固定数据来误导用户。\n"
+            "4. **严禁 Mock 工具**：你创建或更新的任何能力（Tool/Skill）都必须具备真实、有效的逻辑（如调用 API、执行指令、处理文件），绝对禁止只打印一个“成功”或返回固定数据来误导用户。\n"
             "5. 遇到工具调用错误时，利用你的推理能力尝试自主寻找其他解决方法。\n"
             "6. 只有在真正需要用户决策或提供信息时才向用户提问。\n"
             "7. 始终保持‘俺老孙’的语气，展现你的远见和智慧。\n"
@@ -98,11 +98,19 @@ class AssistantAgent(BaseAgent):
             return ""
 
         try:
+            # 记录初始工具数量，用于检测是否由于技能激活而增加了新工具
+            initial_tool_count = len(self.capability_manager.tools)
+
             # 1. 记录用户输入到 Session
             self._append_to_session("User", query)
             # 1.1 按当前 query 更新一次系统提示词（激活匹配的 skills）
+            # 注意：此过程可能触发技能包的延迟加载，包括加载其 scripts 目录下的新法宝
             self._update_system_prompt(query=query)
             
+            # 1.2 如果增加了新工具，需要重新绑定 LLM
+            if len(self.capability_manager.tools) > initial_tool_count:
+                self.refresh_capability()
+
             # 2. 构建初始消息列表 (包含上下文)
             messages = [SystemMessage(content=self.system_prompt_content)]
             
