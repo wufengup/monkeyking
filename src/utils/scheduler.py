@@ -19,7 +19,7 @@ class SchedulerManager:
     def __init__(self, capability_manager=None):
         self.tasks: List[Dict[str, Any]] = []
         self.capability_manager = capability_manager
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._stop_event = threading.Event()
         self._thread = None
         

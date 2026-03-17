@@ -48,7 +48,8 @@ def start_agent(
     model: Optional[str] = typer.Option(None, "--model", "-m", help="模型名称或 Endpoint ID"),
     api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API 密钥"),
     base_url: Optional[str] = typer.Option(None, "--base-url", "-u", help="API 基础 URL"),
-    interactive: bool = typer.Option(True, "--interactive/--no-interactive", help="是否开启交互模式")
+    interactive: bool = typer.Option(True, "--interactive/--no-interactive", help="是否开启对话交互模式"),
+    auto_approve: Optional[bool] = typer.Option(None, "--auto-approve", "-y", help="是否自动批准法宝调用（无需人工干预）")
 ):
     """
     启动 MonkeyKing 助理 Agent。
@@ -69,6 +70,10 @@ def start_agent(
     if base_url: overrides["base_url"] = base_url
     
     llm_params = LLMConfig.get_llm_params(overrides=overrides)
+    
+    # 2.1 确定 auto_approve 最终值：优先级 命令行参数 > 配置文件 > 默认 False
+    behavior_cfg = LLMConfig.get_behavior_config()
+    final_auto_approve = auto_approve if auto_approve is not None else behavior_cfg.get("auto_approve_tools", False)
 
     # 3. 打印项目 Logo
     print_logo()
@@ -102,7 +107,8 @@ def start_agent(
                     break
                 
                 # Agent 处理，支持动态思考状态显示及人工干预
-                response = agent.run({"query": user_input}, is_interactive=interactive)
+                # 如果 auto_approve 为 True，则 is_interactive 为 False
+                response = agent.run({"query": user_input}, is_interactive=not final_auto_approve)
                 
                 # 获取情绪并打印消息
                 mood = getattr(agent, "last_mood", "neutral")

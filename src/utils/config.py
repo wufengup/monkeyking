@@ -70,6 +70,9 @@ class LLMConfig:
         },
         "memory": {
             "consolidation_window": 20
+        },
+        "behavior": {
+            "auto_approve_tools": False
         }
     }
 
@@ -243,6 +246,12 @@ class LLMConfig:
         """获取记忆相关配置"""
         config = cls.load_config()
         return config.get("memory", cls.DEFAULT_CONFIG["memory"])
+
+    @classmethod
+    def get_behavior_config(cls) -> Dict[str, Any]:
+        """获取行为相关配置"""
+        config = cls.load_config()
+        return config.get("behavior", cls.DEFAULT_CONFIG["behavior"])
 
     @classmethod
     def update_tool_config(cls, tool_name: str, new_config: Dict[str, Any]):

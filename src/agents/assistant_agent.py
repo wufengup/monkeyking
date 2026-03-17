@@ -87,7 +87,11 @@ class AssistantAgent(BaseAgent):
         )
 
         if self.long_term_memory:
-            self.system_prompt_content += f"关于用户的长期记忆（包含日期信息）：\n{self.long_term_memory}\n"
+            self.system_prompt_content += (
+                f"\n=== 长期记忆 (Long-term Memory) ===\n"
+                "大圣，请务必特别关注【核心规则与偏好】部分，那是主人立下的禁令，你必须严格遵守！\n"
+                f"{self.long_term_memory}\n"
+            )
 
     def run(self, input_data: Dict[str, Any], is_interactive: bool = False, callback: Optional[AgentCallback] = None) -> str:
         """
@@ -325,12 +329,22 @@ class AssistantAgent(BaseAgent):
 
             # 任务 2: 提炼长期记忆存入 memory.md
             memory_prompt = (
-                "请从以下对话中提炼关于用户的长期记忆（如：行为偏好、重要事实、习惯等）。\n"
-                f"当前日期是 {current_date}。请确保每条记录都带有日期信息。\n"
-                "请结合现有的记忆进行更新、补充或去重。以 Markdown 列表形式输出完整的长期记忆。\n\n"
+                "你现在是大圣的‘记忆元神’。请从以下对话中提炼长期记忆，并严格按以下 Markdown 格式整合到现有记忆中：\n\n"
+                "### 1. [核心规则与偏好]\n"
+                "这里只记录用户明确要求的‘规则’、‘禁忌’或‘操作准则’（例如：‘以后整合前必须确认’、‘不要使用某种语气’）。\n\n"
+                "### 2. [重要事实]\n"
+                "记录关于用户、环境或项目的客观事实（如：用户所在地、主目录路径、正在进行的项目名）。\n\n"
+                "### 3. [习惯与偏好]\n"
+                "记录用户表现出的行为倾向（如：喜欢查天气、关注 AI 新闻）。\n\n"
+                "### 4. [近期动态 (按日期)]\n"
+                "简要记录每天发生的大事。请保留原有的日期记录，但要精简内容。\n\n"
+                "--- 任务要求 ---\n"
+                "1. 结合现有的记忆进行更新、补充或去重。\n"
+                "2. 如果对话中有用户明确要求的‘以后要如何如何’，必须将其精准记录在‘核心规则与偏好’中。\n"
+                f"3. 当前日期是 {current_date}。\n\n"
                 f"现有的长期记忆：\n{self.long_term_memory}\n\n"
                 f"新的对话内容：\n{session_str}\n\n"
-                "输出完整的长期记忆（包含日期）："
+                "请输出整合后的完整长期记忆："
             )
             memory_res = self.llm.invoke([HumanMessage(content=memory_prompt)])
             self.long_term_memory = memory_res.content
