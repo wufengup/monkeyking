@@ -12,6 +12,13 @@ const agentList = document.getElementById('agent-list');
 const currentAgentName = document.getElementById('current-agent-name');
 const configContent = document.getElementById('config-content');
 
+const uploadBtn = document.getElementById('upload-btn');
+const imageUpload = document.getElementById('image-upload');
+const imagePreviewArea = document.getElementById('image-preview-area');
+const imagePreview = document.getElementById('image-preview');
+const clearImageBtn = document.getElementById('clear-image-btn');
+let currentImageBase64 = null;
+
 // 初始化
 async function init() {
     await fetchAgents();
@@ -28,6 +35,56 @@ async function init() {
             sendMessage();
         }
     });
+    
+    // 图片上传事件
+    uploadBtn.addEventListener('click', () => imageUpload.click());
+    imageUpload.addEventListener('change', handleImageSelect);
+    clearImageBtn.addEventListener('click', clearImage);
+}
+
+function handleImageSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // 上传图片到后端获取 base64/url
+    uploadImage(file);
+}
+
+async function uploadImage(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        appendSystemMessage("正在上传图片...");
+        const res = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!res.ok) throw new Error("Upload failed");
+        
+        const data = await res.json();
+        currentImageBase64 = data.url;
+        
+        // 显示预览
+        imagePreview.src = currentImageBase64;
+        imagePreviewArea.style.display = 'flex';
+        
+        // 移除上传中提示
+        chatHistory.lastElementChild.remove();
+        
+    } catch (e) {
+        appendSystemMessage(`图片上传失败: ${e.message}`);
+    }
+    
+    // 清空 input，允许再次选择同一文件
+    imageUpload.value = '';
+}
+
+function clearImage() {
+    currentImageBase64 = null;
+    imagePreview.src = '';
+    imagePreviewArea.style.display = 'none';
 }
 
 // 切换 Tab
@@ -95,8 +152,9 @@ function switchAgent(name) {
     // 重新获取配置
     fetchConfig(name);
     
-    // 断开旧连接，连接新 Agent
+    // 断开旧连接，并屏蔽其 onclose 回调，防止误报断开
     if (ws) {
+        ws.onclose = null;
         ws.close();
     }
     chatHistory.innerHTML = ''; // 清空聊天记录
@@ -176,13 +234,46 @@ function ensureAgentMessageDiv() {
 
 function sendMessage() {
     const text = chatInput.value.trim();
-    if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+    if ((!text && !currentImageBase64) || !ws || ws.readyState !== WebSocket.OPEN) return;
     
-    appendUserMessage(text);
+    // 构建消息 payload
+    let payload;
+    if (currentImageBase64) {
+        // 多模态消息结构
+        payload = { 
+            query: [
+                { type: "text", text: text || "请分析这张图片" },
+                { type: "image_url", image_url: { url: currentImageBase64 } }
+            ]
+        };
+        // 在 UI 上显示图片和文字
+        appendUserMessageWithImage(text, currentImageBase64);
+        clearImage();
+    } else {
+        // 纯文本消息
+        payload = { query: text };
+        appendUserMessage(text);
+    }
+    
     chatInput.value = '';
     sendBtn.disabled = true;
     
-    ws.send(JSON.stringify({ query: text }));
+    ws.send(JSON.stringify(payload));
+}
+
+function appendUserMessageWithImage(text, imageUrl) {
+    const div = document.createElement('div');
+    div.className = 'message user';
+    let contentHtml = '';
+    if (imageUrl) {
+        contentHtml += `<img src="${imageUrl}" alt="Uploaded Image">`;
+    }
+    if (text) {
+        contentHtml += `<p>${text}</p>`;
+    }
+    div.innerHTML = contentHtml;
+    chatHistory.appendChild(div);
+    scrollToBottom();
 }
 
 function appendUserMessage(text) {

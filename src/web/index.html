@@ -47,8 +47,14 @@
                 <div class="message system">欢迎使用 MonkeyKing Web 端。你可以直接在下方输入框与大圣或分身对话。</div>
             </div>
             <div class="chat-input-area">
+                <input type="file" id="image-upload" accept="image/*" style="display: none;">
+                <button id="upload-btn" class="icon-btn" title="上传图片">🖼️</button>
                 <textarea id="chat-input" placeholder="输入你想对大圣说的话... (Shift+Enter 换行，Enter 发送)"></textarea>
                 <button id="send-btn" class="send-btn">发送</button>
+            </div>
+            <div id="image-preview-area" class="image-preview-area" style="display: none;">
+                <img id="image-preview" src="" alt="Image Preview">
+                <button id="clear-image-btn" class="sm-btn" style="background: rgba(0,0,0,0.5);">❌</button>
             </div>
         </div>
     </div>

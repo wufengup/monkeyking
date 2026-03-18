@@ -160,10 +160,18 @@ class AssistantAgent(BaseAgent):
             initial_tool_count = len(self.capability_manager.tools)
 
             # 1. 记录用户输入到 Session
-            self._append_to_session("User", query)
+            # 1.0.5 如果 query 是复合结构（如包含图片），提取文本用于 prompt 更新和显示
+            text_query = query
+            if isinstance(query, list):
+                 # 假设第一部分是文本
+                 for item in query:
+                     if isinstance(item, dict) and item.get("type") == "text":
+                         text_query = item.get("text", "")
+                         break
+            
+            self._append_to_session("User", text_query)
             # 1.1 按当前 query 更新一次系统提示词（激活匹配的 skills）
-            # 注意：此过程可能触发技能包的延迟加载，包括加载其 scripts 目录下的新法宝
-            self._update_system_prompt(query=query)
+            self._update_system_prompt(query=text_query)
             
             # 1.2 如果增加了新工具，需要重新绑定 LLM
             if len(self.capability_manager.tools) > initial_tool_count:
@@ -213,6 +221,16 @@ class AssistantAgent(BaseAgent):
                                 messages.append(ToolMessage(content=match.group(2), tool_name=match.group(1), tool_call_id="old_hist"))
                         except:
                             pass
+            
+            # 2.5 将当前最新的复合 query (如果有图片) 作为最新的 HumanMessage
+            if isinstance(query, list):
+                # 如果 session 里的最后一条消息就是刚才添加的 text_query，
+                # 那么为了让模型看到多模态内容（图片），我们需要移除这条纯文本消息，
+                # 并替换为包含 image_url 的完整 query。
+                if messages and isinstance(messages[-1], HumanMessage) and messages[-1].content == text_query:
+                    messages.pop()
+                messages.append(HumanMessage(content=query))
+            # 如果是纯文本，不需要做任何事，因为上面的循环已经把 session 里的内容（包含本次 query）加进去了。
 
             # 3. 循环处理消息，直到 LLM 不再请求调用工具
             max_iterations = 20

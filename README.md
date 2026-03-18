@@ -213,9 +213,3 @@ src/skills/skillpacks/
 - 每次用户提问时按 query 动态激活匹配技能
 - 仅对命中技能按需加载引用的 references 内容并注入提示词
 
-### 与旧版 Skill 的兼容关系
-
-- 新版优先级：`SKILL.md` > Python `BaseMonkeyKingSkill`
-- `skill.json` 已移除，不再加载
-
-这意味着你可以渐进迁移，不需要一次性重写全部技能。

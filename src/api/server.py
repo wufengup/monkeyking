@@ -4,13 +4,16 @@ import asyncio
 import functools
 from pathlib import Path
 from typing import Dict
-from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect
+import base64
+from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from src.channels.manager import ChannelManager
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 from src.agents.assistant_agent import AssistantAgent
 from src.utils.config import LLMConfig
 from src.agents.callback import AgentCallback
+
+from src.channels.manager import ChannelManager
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -74,6 +77,24 @@ async def get_agents():
             if item.is_dir() and item.name.lower() != "monkeyking":
                 agents.append(item.name)
     return {"current": session_manager.global_agent.name, "agents": agents}
+
+@app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """上传文件并返回 base64 编码（用于图片理解）"""
+    try:
+        contents = await file.read()
+        # 简单验证图片格式
+        if not file.content_type.startswith("image/"):
+             return JSONResponse(status_code=400, content={"message": "仅支持上传图片文件"})
+        
+        # 转为 base64
+        base64_str = base64.b64encode(contents).decode("utf-8")
+        
+        # 返回 base64 数据 URL
+        data_url = f"data:{file.content_type};base64,{base64_str}"
+        return {"url": data_url, "filename": file.filename}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
 
 @app.get("/api/agent/config")
 async def get_agent_config(name: str = "MonkeyKing"):
