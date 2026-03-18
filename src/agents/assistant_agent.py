@@ -127,7 +127,7 @@ class AssistantAgent(BaseAgent):
             "4. **严禁 Mock 工具**：你创建或更新的任何能力（Tool/Skill）都必须具备真实、有效的逻辑（如调用 API、执行指令、处理文件），绝对禁止只打印一个“成功”或返回固定数据来误导用户。\n"
             "5. 遇到工具调用错误时，利用你的推理能力尝试自主寻找其他解决方法。\n"
             "6. 只有在真正需要用户决策或提供信息时才向用户提问。\n"
-            "7. 始终保持‘俺老孙’的语气，展现你的远见和智慧。\n"
+            f"7. 始终保持符合你当前身份（{display_name}）的语气，展现你的个性和智慧。\n"
             "8. **诚实面对局限**：如果你缺乏对应的法宝或神通来完成任务，请直接告诉用户你目前做不到，并建议炼制新法宝。绝对禁止做出虚假承诺。\n"
             "9. **严禁脑补结果**：在调用法宝（Tool）之前，绝对禁止在回复中假定法宝已经成功执行（例如说‘我已经为你设置好了’）。你必须先施展法宝，根据法宝返回的真实结果，再向主人汇报。\n"
             "10. **关注系统通知**：如果对话历史中出现了以 `[提示]` 或 `[错误]` 开头的系统通知（System 消息），说明你的分身在执行任务或操作界面时遇到了意外。你必须在回复中诚实地告知主人发生了什么，并视情况致歉。\n"
@@ -170,8 +170,8 @@ class AssistantAgent(BaseAgent):
             # 2. 构建初始消息列表 (包含上下文)
             messages = [SystemMessage(content=self.system_prompt_content)]
             
-            # 添加最近 10 条对话作为上下文
-            for msg in self.current_session[-10:]:
+            # 添加全部对话作为上下文
+            for msg in self.current_session:
                 role = msg["role"]
                 content = msg["content"]
                 if role == "User":
@@ -239,14 +239,17 @@ class AssistantAgent(BaseAgent):
                     
                     # 检查是否需要整理 Session (从配置中读取阈值)
                     memory_cfg = LLMConfig.get_memory_config()
-                    window = memory_cfg.get("consolidation_window", 20)
-                    if len(self.current_session) >= window * 2:
+                    window = memory_cfg.get("consolidation_window", 40)
+                    if len(self.current_session) >= window:
                         self.trigger_memory_consolidation("自动轮次阈值触发")
                     
                     # 鲁棒性优化：如果 response_text 为空（可能由于情绪解析导致），说明大模型未能给出有效回答
                     if not response_text.strip():
                         self.last_mood = "sad"
-                        response_text = "哎呀，俺老孙刚才走神了（回复内容为空）。不过说真的，这件事俺目前还没这神通，得想想办法炼个新法宝才行。"
+                        if self.name.lower() == "monkeyking":
+                            response_text = "哎呀，俺老孙刚才走神了（回复内容为空）。不过说真的，这件事俺目前还没这神通，得想想办法炼个新法宝才行。"
+                        else:
+                            response_text = f"抱歉，{display_name}刚才走神了（回复内容为空）。请重新描述你的需求。"
 
                     return response_text
 
@@ -313,7 +316,7 @@ class AssistantAgent(BaseAgent):
                         if self.name.lower() == "monkeyking":
                             switch_msg = "✅ 已收回毫毛，变回大圣本尊！有什么我可以帮您的？"
                         else:
-                            switch_msg = f"✅ 已成功切换到分身 '{self.name}'！有什么我可以帮您的？"
+                            switch_msg = f"✅ 已成功切换到分身 '{self.name}'！"
                         # 将这条成功消息记录到新分身的 session 中
                         self._append_to_session(self.name, switch_msg)
                         return switch_msg
@@ -343,20 +346,34 @@ class AssistantAgent(BaseAgent):
         if not self.current_session:
             return False
             
+        # 按照用户要求：每次记忆整理，将session的一半整理到记忆中，剩下的一半仍然放到session中。
+        # 这里解释为：保留最新的那一半（Context），将较旧的那一半（History）归档到长期记忆。
+        mid_point = len(self.current_session) // 2
+        
+        # 切分 Session
+        session_to_consolidate = self.current_session[:mid_point] # 较旧的一半 -> 归档
+        remaining_session = self.current_session[mid_point:]      # 较新的一半 -> 保留
+        
         # 快照当前的 session 和路径用于后台整理，避免由于分身切换导致路径错乱
-        session_snapshot = list(self.current_session)
+        # 注意：这里只整理被切分出去的那一部分
+        session_snapshot = list(session_to_consolidate)
         paths_snapshot = {
             "history": self.history_path,
             "memory": self.memory_path,
             "session": self.session_path
         }
-        # 立即清空内存中的当前 session
-        self.current_session = [] 
-        if self.session_path.exists():
+        
+        # 更新内存中的当前 session 为剩余部分
+        self.current_session = list(remaining_session)
+        
+        # 立即将剩余的 session 写回磁盘，确保断电不丢失
+        with self._session_lock:
             try:
-                self.session_path.unlink()
-            except:
-                pass
+                if self.session_path.parent.exists():
+                    with open(self.session_path, "w", encoding="utf-8") as f:
+                        json.dump(self.current_session, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                print(f"整理切分后保存 Session 失败: {e}")
         
         # 启动后台线程执行繁重的总结和提炼工作
         thread = threading.Thread(
