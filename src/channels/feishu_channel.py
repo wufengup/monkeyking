@@ -67,6 +67,9 @@ class FeishuChannel(BaseChannel):
     """
     def __init__(self, agent: Optional[AssistantAgent] = None):
         super().__init__(agent)
+        # 支持动态获取 agent 的回调，解决单例隔离问题
+        self.agent_provider = None
+        
         # 从配置中获取飞书参数
         feishu_config = LLMConfig.get_tool_config("feishu_channel")
         self.app_id = feishu_config.get("app_id", "")
@@ -190,6 +193,12 @@ class FeishuChannel(BaseChannel):
 
         return {"code": 0}
 
+    def get_agent_for_chat(self, chat_id: str) -> AssistantAgent:
+        """获取当前会话对应的 Agent 实例"""
+        if self.agent_provider:
+            return self.agent_provider(chat_id)
+        return self.agent
+
     async def _process_and_reply(self, chat_id: str, text: str, message_id: Optional[str] = None):
         """
         调用 Agent 处理并回复消息。
@@ -199,25 +208,47 @@ class FeishuChannel(BaseChannel):
             if message_id:
                 callback = FeishuAgentCallback(self, message_id)
 
+            # 获取当前 chat 对应的独立 Agent 实例
+            current_agent = self.get_agent_for_chat(chat_id)
+
+            # 每次请求前，检查内存中的 agent 是否因为其他渠道(比如控制台)或上次请求被切换了
+            current_agent_name = current_agent.name
+            
+            # 兼容：如果当前是分身，而且用户提到了“变回大圣本尊”等字眼，在外部手动触发切换回本体
+            # 这是一个快速通道，防止分身在没有 agent_creator 工具时无法切回
+            if current_agent_name.lower() != "monkeyking" and text.strip() in ["变回大圣本尊", "变回大圣", "切换回大圣", "让大圣回来", "让MonkeyKing回来"]:
+                current_agent.switch_to_agent("MonkeyKing")
+                success = await self.send_message(chat_id, "✅ 已收回毫毛，变回大圣本尊！有什么我可以帮您的？")
+                return
+
             # 在后台线程运行同步的 agent.run
             loop = asyncio.get_event_loop()
             response_text = await loop.run_in_executor(
                 None, 
-                functools.partial(self.agent.run, {"query": text}, False, callback)
+                functools.partial(current_agent.run, {"query": text}, False, callback)
             )
+            
+            # 检查执行后是否发生了身份切换
+            if getattr(current_agent, "_agent_switched_in_turn", False) or current_agent.name != current_agent_name:
+                # 分身切换成功，系统已经在 run 内部返回了切换成功的文案
+                pass
             
             success = await self.send_message(chat_id, response_text)
             if not success:
                 # 如果发送失败，记录到 Agent 的 Session 中，让大圣知道刚才的消息没发出去
                 logger.error(f"发送消息到飞书失败，chat_id: {chat_id}")
-                self.agent._append_to_session("System", f"[错误] 刚才给用户的回复发送失败了。请在下次对话中向用户致歉并重试。失败原因：飞书接口调用不成功。")
+                current_agent._append_to_session("System", f"[错误] 刚才给用户的回复发送失败了。请在下次对话中向用户致歉并重试。失败原因：飞书接口调用不成功。")
         except Exception as e:
             logger.error(f"处理并回复飞书消息失败: {e}")
-            error_msg = f"哎呀，俺老孙刚才走神了（出错了）：{e}"
+            error_msg = f"哎呀，出错了：{e}"
             success = await self.send_message(chat_id, error_msg)
             if not success:
                 logger.error(f"回复错误消息到飞书失败，chat_id: {chat_id}")
-                self.agent._append_to_session("System", f"[严重错误] 处理消息时报错且回复错误信息也失败了。错误：{e}")
+                # 尝试写入当前 agent session
+                try:
+                    self.get_agent_for_chat(chat_id)._append_to_session("System", f"[严重错误] 处理消息时报错且回复错误信息也失败了。错误：{e}")
+                except:
+                    pass
 
     async def send_reaction(self, message_id: str, reaction_type: str) -> bool:
         """
@@ -239,8 +270,9 @@ class FeishuChannel(BaseChannel):
 
         if not response.success():
             logger.error(f"发送飞书表情失败: {response.code}, {response.msg}")
-            # 同步给 Agent
-            self.agent._append_to_session("System", f"[提示] 尝试在飞书消息上贴表情失败了（类型: {reaction_type}）。错误信息: {response.msg}")
+            # 同步给 Agent（默认使用主 Agent 记录日志）
+            if self.agent:
+                self.agent._append_to_session("System", f"[提示] 尝试在飞书消息上贴表情失败了（类型: {reaction_type}）。错误信息: {response.msg}")
             return False
         
         return True
