@@ -215,10 +215,11 @@ class FeishuChannel(BaseChannel):
             current_agent_name = current_agent.name
             
             # 兼容：如果当前是分身，而且用户提到了“变回大圣本尊”等字眼，在外部手动触发切换回本体
-            # 这是一个快速通道，防止分身在没有 agent_creator 工具时无法切回
+            # （由于现在是多实例隔离，外部的飞书渠道暂时保留这个能力，但仅限于将全局指针切回）
             if current_agent_name.lower() != "monkeyking" and text.strip() in ["变回大圣本尊", "变回大圣", "切换回大圣", "让大圣回来", "让MonkeyKing回来"]:
-                current_agent.switch_to_agent("MonkeyKing")
-                success = await self.send_message(chat_id, "✅ 已收回毫毛，变回大圣本尊！有什么我可以帮您的？")
+                # 注意：这里需要访问 session_manager 的接口，但渠道内不直接依赖，
+                # 所以我们仅仅返回提示，不再实际执行 switch_to_agent（该方法已被移除）
+                success = await self.send_message(chat_id, "✅ 已收到指令。但目前系统已升级为多实例模式，请通过 Web 界面或切换 Chat_ID 重新连接大圣本体。")
                 return
 
             # 在后台线程运行同步的 agent.run
@@ -227,11 +228,6 @@ class FeishuChannel(BaseChannel):
                 None, 
                 functools.partial(current_agent.run, {"query": text}, False, callback)
             )
-            
-            # 检查执行后是否发生了身份切换
-            if getattr(current_agent, "_agent_switched_in_turn", False) or current_agent.name != current_agent_name:
-                # 分身切换成功，系统已经在 run 内部返回了切换成功的文案
-                pass
             
             success = await self.send_message(chat_id, response_text)
             if not success:

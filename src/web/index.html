@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonkeyKing Agent Web UI</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <!-- Using Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- 左侧边栏 -->
+        <div class="sidebar">
+            <div class="logo">
+                🐒 MonkeyKing Web
+            </div>
+            
+            <div class="section">
+                <h3>当前 Agent</h3>
+                <div id="current-agent-name" class="agent-badge">MonkeyKing</div>
+            </div>
+
+            <div class="section">
+                <h3>分身列表</h3>
+                <ul id="agent-list" class="agent-list">
+                    <!-- Agent list items will be injected here -->
+                </ul>
+                <button id="refresh-agents-btn" class="sm-btn">刷新列表</button>
+            </div>
+
+            <div class="section flex-grow">
+                <h3>当前配置 (Soul/Config)</h3>
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="switchTab('soul')">Soul</button>
+                    <button class="tab-btn" onclick="switchTab('config')">Config</button>
+                </div>
+                <div id="config-content" class="code-block">
+                    <!-- Config content here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧主聊天区 -->
+        <div class="main-chat">
+            <div id="chat-history" class="chat-history">
+                <div class="message system">欢迎使用 MonkeyKing Web 端。你可以直接在下方输入框与大圣或分身对话。</div>
+            </div>
+            <div class="chat-input-area">
+                <textarea id="chat-input" placeholder="输入你想对大圣说的话... (Shift+Enter 换行，Enter 发送)"></textarea>
+                <button id="send-btn" class="send-btn">发送</button>
+            </div>
+        </div>
+    </div>
+    <script src="/static/app.js"></script>
+</body>
+</html>

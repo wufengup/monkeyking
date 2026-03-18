@@ -13,7 +13,7 @@ from src.tools.base_tool import BaseMonkeyKingTool
 from src.utils.config import LLMConfig
 
 class AgentCreatorInput(BaseModel):
-    action: str = Field(description="要执行的操作：'create_agent' (创建分身Agent), 'update_agent_soul' (完善分身人格), 'list_agents' (列出所有分身), 'switch_agent' (切换到指定分身)")
+    action: str = Field(description="要执行的操作：'create_agent' (创建分身Agent), 'update_agent_soul' (完善分身人格), 'list_agents' (列出所有分身)")
     name: Optional[str] = Field(default=None, description="分身名")
     soul_content: Optional[str] = Field(default=None, description="分身人格描述")
 
@@ -21,7 +21,6 @@ class AgentCreatorTool(BaseMonkeyKingTool):
     """
     分身炼制工坊（Agent Creator）：
     大圣的“毫毛分身”神通，用于炼制、完善和管理具备特定人格的分身 Agent。
-    支持在对话中直接切换当前活跃的分身。
     """
     @property
     def name(self) -> str:
@@ -29,7 +28,7 @@ class AgentCreatorTool(BaseMonkeyKingTool):
 
     @property
     def description(self) -> str:
-        return "炼制、完善和管理大圣的分身 Agent。支持在对话中切换活跃分身。"
+        return "炼制、完善和管理大圣的分身 Agent。"
 
     def to_langchain_tool(self) -> BaseTool:
         return StructuredTool.from_function(
@@ -49,18 +48,23 @@ class AgentCreatorTool(BaseMonkeyKingTool):
                 return self._list_agents()
             elif action == "switch_agent":
                 return self._switch_agent(name)
+
             else:
-                return f"错误：未知操作 '{action}'。"
+                return f"错误：未知操作 '{action}'."
         except Exception as e:
             return f"分身炼制过程中出了点岔子：{str(e)}"
 
     def _switch_agent(self, name: Optional[str] = None) -> str:
-        """切换当前活跃的分身 Agent。
+        """切换当前活跃的分身 Agent（仅在 Agent 交互模式下有效）。"""
         
-        如果未指定名称：
-        - 当只有 2 个分身时（本体 +1 个分身，或 2 个分身），自动切换到另一个
-        - 当有多个分身时，提示用户指定名称
-        """
+        # 鉴权：检测运行环境，如果是 Server/Web 模式，禁止通过对话切换
+        import sys
+        # 简单的 heuristic：如果命令行参数包含 server 或 uvicorn，或者是 Web 模式
+        is_server_mode = any(arg.endswith("server.py") or "uvicorn" in arg or "server" in arg for arg in sys.argv)
+        
+        if is_server_mode:
+             return "错误：当前处于 Server/Web 模式，不支持通过对话切换分身。请使用 Web 界面左侧列表或更换 API 路由进行切换。"
+
         # 兼容性处理：将 "大圣"、"本体" 等别名映射回 "MonkeyKing"
         if name and name.strip() in ["大圣", "本体", "孙悟空", "MonkeyKing"]:
             name = "MonkeyKing"

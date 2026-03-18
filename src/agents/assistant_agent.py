@@ -60,7 +60,7 @@ class AssistantAgent(BaseAgent):
         self._update_system_prompt()
 
     def switch_to_agent(self, name: str):
-        """切换到另一个分身 Agent 身份"""
+        """切换到另一个分身 Agent 身份（仅用于 Agent 模式下的热切换）"""
         # 1. 切换身份和路径
         self.name = name
         self.agent_dir = LLMConfig.get_agent_dir(name)
@@ -74,10 +74,12 @@ class AssistantAgent(BaseAgent):
         self.session_path = self.agent_dir / "session" / "session.json"
         
         # 2. 重新加载新分身的配置和历史
+        self.llm_params = LLMConfig.get_llm_params()
         self.long_term_memory = self._load_long_term_memory()
         self.current_session = self._load_current_session()
         self.soul_description = self._load_soul_description()
         self.turn_count = len(self.current_session)
+        self.last_mood = "neutral"
         
         # 3. 刷新法宝并更新系统提示词
         self._refresh_capabilities()
