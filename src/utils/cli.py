@@ -25,14 +25,28 @@ def print_logo():
     console.print(panel)
 
 def print_agent_message(name: str, message: str, mood: str = "neutral"):
-    """打印 Agent 消息，支持根据情绪调整样式"""
-    mood_styles = {
+    """打印 Agent 消息，支持根据情绪和身份调整样式"""
+    # 基础情绪样式（猴子主题）
+    monkey_mood_styles = {
         "happy": {"color": "bold green", "emoji": "🐒✨"},
         "angry": {"color": "bold red", "emoji": "🔥💢"},
         "sad": {"color": "bold blue", "emoji": "💧🐒"},
         "neutral": {"color": "cyan", "emoji": "🐒"},
         "excited": {"color": "bold magenta", "emoji": "🕺🐵"}
     }
+    
+    # 分身基础样式（非猴子主题）
+    clone_mood_styles = {
+        "happy": {"color": "bold green", "emoji": "😊✨"},
+        "angry": {"color": "bold red", "emoji": "😠💢"},
+        "sad": {"color": "bold blue", "emoji": "😔💧"},
+        "neutral": {"color": "cyan", "emoji": "🤖"},
+        "excited": {"color": "bold magenta", "emoji": "🤩🎉"}
+    }
+    
+    # 根据身份选择样式库
+    is_monkeyking = name.lower() in ["monkeyking", "大圣"]
+    mood_styles = monkey_mood_styles if is_monkeyking else clone_mood_styles
     
     style = mood_styles.get(mood, mood_styles["neutral"])
     color = style["color"]
@@ -102,12 +116,15 @@ def print_tool_execution(tool_name: str, args: dict, result: str):
 
 def print_thought(name: str, thought: str, tool_calls: list = None):
     """打印 Agent 的思考内容和计划"""
+    is_monkeyking = name.lower() in ["monkeyking", "大圣"]
+    action_prefix = "[俺老孙准备动用法宝]:\n" if is_monkeyking else f"[{name} 准备调用工具]:\n"
+    
     content = Text()
     if thought and thought.strip():
         content.append(thought + "\n", style="italic cyan")
     
     if tool_calls:
-        content.append("\n[俺老孙准备动用法宝]:\n", style="bold yellow")
+        content.append(f"\n{action_prefix}", style="bold yellow")
         for tc in tool_calls:
             t_name = tc.get("name", "未知工具")
             t_args = tc.get("args", {})
