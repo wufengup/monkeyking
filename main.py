@@ -75,14 +75,15 @@ def start_agent(
     behavior_cfg = LLMConfig.get_behavior_config()
     final_auto_approve = auto_approve if auto_approve is not None else behavior_cfg.get("auto_approve_tools", False)
 
-    # 3. 打印项目 Logo
+    # 3. 准备提示信息
     print_logo()
-    print_system_message(f"--- {name} 正在启动... ---")
+    display_name = "大圣" if name.lower() == "monkeyking" else name
+    print_system_message(f"--- {display_name} 正在启动... ---")
     
     # 4. 初始化 AssistantAgent
     try:
         agent = AssistantAgent(name=name, model_params=llm_params)
-        print_system_message(f"--- {name} 准备就绪 ---")
+        print_system_message(f"--- {display_name} 准备就绪 ---")
     except Exception as e:
         print_error(f"Agent 初始化失败: {str(e)}")
         raise typer.Exit(code=1)
@@ -103,7 +104,8 @@ def start_agent(
                     continue
                 
                 if user_input.lower() in ["exit", "quit", "退出"]:
-                    print_agent_message(name, "再见！祝你今天过得愉快。", mood="happy")
+                    display_name = "大圣" if agent.name.lower() == "monkeyking" else agent.name
+                    print_agent_message(display_name, "再见！祝你今天过得愉快。", mood="happy")
                     break
                 
                 # Agent 处理，支持动态思考状态显示及人工干预
@@ -112,12 +114,16 @@ def start_agent(
                 
                 # 获取情绪并打印消息
                 mood = getattr(agent, "last_mood", "neutral")
-                print_agent_message(name, response, mood=mood)
+                # 使用 agent.name 而非启动参数 name，以支持动态切换后的显示
+                display_name = "大圣" if agent.name.lower() == "monkeyking" else agent.name
+                print_agent_message(display_name, response, mood=mood)
                 
         except (KeyboardInterrupt, typer.Abort):
-            print_agent_message(name, "程序被中断。再见！", mood="sad")
+            display_name = "大圣" if agent.name.lower() == "monkeyking" else agent.name
+            print_agent_message(display_name, "程序被中断。再见！", mood="sad")
     else:
-        print_agent_message(name, "非交互模式暂未实现具体逻辑。")
+        display_name = "大圣" if agent.name.lower() == "monkeyking" else agent.name
+        print_agent_message(display_name, "非交互模式暂未实现具体逻辑。")
 
 @app.command()
 def version():

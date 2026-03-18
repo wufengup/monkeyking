@@ -33,6 +33,7 @@ class LLMConfig:
     SOUL_PATH = CONFIG_DIR / "soul.md"
     TOOLS_DIR = CONFIG_DIR / "tools"
     SKILLS_DIR = CONFIG_DIR / "skills"
+    AGENTS_DIR = CONFIG_DIR / "agents"
     
     # 初始化标记，避免重复执行同步逻辑
     _initialized = False
@@ -69,7 +70,7 @@ class LLMConfig:
             }
         },
         "memory": {
-            "consolidation_window": 20
+            "consolidation_window": 50
         },
         "behavior": {
             "auto_approve_tools": False
@@ -89,6 +90,14 @@ class LLMConfig:
         cls.SOUL_PATH = cls.CONFIG_DIR / "soul.md"
         cls.TOOLS_DIR = cls.CONFIG_DIR / "tools"
         cls.SKILLS_DIR = cls.CONFIG_DIR / "skills"
+        cls.AGENTS_DIR = cls.CONFIG_DIR / "agents"
+
+    @classmethod
+    def get_agent_dir(cls, agent_name: str) -> Path:
+        """获取指定分身 Agent 的存储目录"""
+        if agent_name.lower() == "monkeyking":
+            return cls.CONFIG_DIR
+        return cls.AGENTS_DIR / agent_name
 
     @classmethod
     def ensure_config_exists(cls, force: bool = False, sync: bool = False):
@@ -110,6 +119,7 @@ class LLMConfig:
             (home_dir / "session").mkdir(parents=True, exist_ok=True)
             (home_dir / "tools").mkdir(parents=True, exist_ok=True)
             (home_dir / "skills").mkdir(parents=True, exist_ok=True)
+            (home_dir / "agents").mkdir(parents=True, exist_ok=True)
             cls._update_paths(home_dir)
             
             # 2. 同步逻辑：仅在 sync=True 时，如果本地存在配置目录，且与主目录不同，则同步过去

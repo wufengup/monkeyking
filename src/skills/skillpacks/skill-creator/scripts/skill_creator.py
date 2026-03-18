@@ -14,10 +14,10 @@ from src.utils.config import LLMConfig
 
 class SkillCreatorInput(BaseModel):
     action: str = Field(description="要执行的操作：'create_skill' (创建技能), 'add_script_to_skill' (为已有技能添加脚本法宝), 'merge_skills' (整合多个技能为一个), 'install_from_github' (GitHub安装), 'install_from_url' (链接安装), 'install_from_clawhub' (ClawHub安装), 'uninstall_skill' (卸载技能)")
-    name: str = Field(description="神通名称（kebab-case 命名，如：'news-brief'）")
-    description: Optional[str] = Field(default=None, description="神通描述")
-    content: Optional[str] = Field(default=None, description="SOP 内容或脚本代码内容")
-    script_name: Optional[str] = Field(default=None, description="脚本文件名（如 'helper.py'，用于 add_script_to_skill 动作）")
+    name: str = Field(description="名称（如技能名）")
+    description: Optional[str] = Field(default=None, description="描述信息")
+    content: Optional[str] = Field(default=None, description="核心内容（SOP、脚本代码）")
+    script_name: Optional[str] = Field(default=None, description="脚本文件名（用于 add_script_to_skill）")
     source_skills: Optional[List[str]] = Field(default=None, description="要被整合/合并的源技能名称列表（用于 merge_skills 动作）")
     github_repo: Optional[str] = Field(default=None, description="GitHub 仓库")
     github_path: Optional[str] = Field(default=None, description="仓库内的目录路径")

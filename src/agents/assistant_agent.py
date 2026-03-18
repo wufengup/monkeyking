@@ -18,6 +18,18 @@ class AssistantAgent(BaseAgent):
         # 0. 确保基础配置目录和路径已初始化
         LLMConfig.ensure_config_exists()
         
+        # 0.1 初始化分身存储目录和路径
+        self.agent_dir = LLMConfig.get_agent_dir(name)
+        self.agent_dir.mkdir(parents=True, exist_ok=True)
+        (self.agent_dir / "memory").mkdir(exist_ok=True)
+        (self.agent_dir / "session").mkdir(exist_ok=True)
+        
+        # 定义实例特定的路径
+        self.soul_path = self.agent_dir / "soul.md"
+        self.memory_path = self.agent_dir / "memory" / "memory.md"
+        self.history_path = self.agent_dir / "memory" / "history.md"
+        self.session_path = self.agent_dir / "session" / "session.json"
+        
         # 1. 初始化锁，确保多线程下 Session 安全
         self._session_lock = threading.Lock()
         
@@ -26,10 +38,8 @@ class AssistantAgent(BaseAgent):
         
         # 2. 初始化能力管理器（先不设置回调，避免循环引用）
         self.capability_manager = CapabilityManager()
-        # 3. 手动绑定刷新回调、记忆法宝引用并执行首次刷新
+        # 3. 手动绑定刷新回调并执行首次刷新
         self.capability_manager.on_capability_added = self._refresh_capabilities
-        if hasattr(self.capability_manager, "memory_tool"):
-            self.capability_manager.memory_tool._agent_ref = self
         self._refresh_capabilities()
         
         # 4. 加载长期记忆、当前 Session 和灵魂描述
@@ -43,12 +53,47 @@ class AssistantAgent(BaseAgent):
         # 记录最后一次的情绪
         self.last_mood = "neutral"
         
+        # 标志位：记录当前回合是否发生了分身切换
+        self._agent_switched_in_turn = False
+        
         # 系统提示词内容
         self._update_system_prompt()
+
+    def switch_to_agent(self, name: str):
+        """切换到另一个分身 Agent 身份"""
+        # 1. 切换身份和路径
+        self.name = name
+        self.agent_dir = LLMConfig.get_agent_dir(name)
+        self.agent_dir.mkdir(parents=True, exist_ok=True)
+        (self.agent_dir / "memory").mkdir(exist_ok=True)
+        (self.agent_dir / "session").mkdir(exist_ok=True)
+        
+        self.soul_path = self.agent_dir / "soul.md"
+        self.memory_path = self.agent_dir / "memory" / "memory.md"
+        self.history_path = self.agent_dir / "memory" / "history.md"
+        self.session_path = self.agent_dir / "session" / "session.json"
+        
+        # 2. 重新加载新分身的配置和历史
+        self.long_term_memory = self._load_long_term_memory()
+        self.current_session = self._load_current_session()
+        self.soul_description = self._load_soul_description()
+        self.turn_count = len(self.current_session)
+        
+        # 3. 刷新法宝并更新系统提示词
+        self._refresh_capabilities()
+        
+        # 4. 设置标志位，通知当前的 run 循环身份已改变
+        self._agent_switched_in_turn = True
 
     def _refresh_capabilities(self):
         """刷新并重新绑定法宝列表"""
         self.tools = self.capability_manager.get_langchain_tools()
+        
+        # 遍历底层原始工具，为需要 Agent 引用的工具注入 self
+        for tool in self.capability_manager.tools:
+            if hasattr(tool, "_agent_ref") or getattr(tool, "name", "") in ["memory_manager", "agent_creator"]:
+                tool._agent_ref = self
+
         # 注意：这里会创建一个新的 ChatOpenAI 实例并重新绑定当前所有工具
         self.llm = ChatOpenAI(**self.llm_params).bind_tools(self.tools)
         # 顺便更新系统提示词，让大圣知道自己有了新神通或法宝
@@ -57,8 +102,11 @@ class AssistantAgent(BaseAgent):
 
     def _update_system_prompt(self, query: str = ""):
         """更新系统提示词，包含灵魂描述、长期记忆和神通 SOP"""
+        # 根据当前身份决定称呼
+        display_name = "大圣" if self.name.lower() == "monkeyking" else self.name
+        
         self.system_prompt_content = (
-            f"你是一个名为 {self.name} 的个人生活助理 Agent。\n\n"
+            f"你是一个名为 {display_name} 的个人生活助理 Agent。\n\n"
         )
         
         # 注入灵魂描述 (包含个性、能力和自我认知)
@@ -83,13 +131,14 @@ class AssistantAgent(BaseAgent):
             "8. **诚实面对局限**：如果你缺乏对应的法宝或神通来完成任务，请直接告诉用户你目前做不到，并建议炼制新法宝。绝对禁止做出虚假承诺。\n"
             "9. **严禁脑补结果**：在调用法宝（Tool）之前，绝对禁止在回复中假定法宝已经成功执行（例如说‘我已经为你设置好了’）。你必须先施展法宝，根据法宝返回的真实结果，再向主人汇报。\n"
             "10. **关注系统通知**：如果对话历史中出现了以 `[提示]` 或 `[错误]` 开头的系统通知（System 消息），说明你的分身在执行任务或操作界面时遇到了意外。你必须在回复中诚实地告知主人发生了什么，并视情况致歉。\n"
-            "11. **情感表达**：请根据对话内容表现出你的喜怒哀乐。并在输出答案的最开头，使用格式 `[MOOD:情绪]` 标明你当前的情绪状态（可选情绪：happy, angry, sad, neutral, excited）。例如：`[MOOD:happy] 哈哈，大圣来也！`。\n\n"
+            f"11. **情感表达**：请根据对话内容表现出你的喜怒哀乐。并在输出答案的最开头，使用格式 `[MOOD:情绪]` 标明你当前的情绪状态（可选情绪：happy, angry, sad, neutral, excited）。例如：`[MOOD:happy] 哈哈，{display_name}来也！`。\n\n"
         )
 
         if self.long_term_memory:
             self.system_prompt_content += (
                 f"\n=== 长期记忆 (Long-term Memory) ===\n"
-                "大圣，请务必特别关注【核心规则与偏好】部分，那是主人立下的禁令，你必须严格遵守！\n"
+                f"{display_name}，请务必特别关注【核心规则与偏好】部分，那是主人立下的禁令，你必须严格遵守！\n"
+                f"【重要警告】无论长期记忆中记录了哪些其他分身（Agent）的人设或档案，那都是别人！你现在的唯一身份是：{display_name}！\n"
                 f"{self.long_term_memory}\n"
             )
 
@@ -100,6 +149,9 @@ class AssistantAgent(BaseAgent):
         query = input_data.get("query", "")
         if not query:
             return ""
+
+        # 重置切换标志
+        self._agent_switched_in_turn = False
 
         try:
             # 记录初始工具数量，用于检测是否由于技能激活而增加了新工具
@@ -113,7 +165,7 @@ class AssistantAgent(BaseAgent):
             
             # 1.2 如果增加了新工具，需要重新绑定 LLM
             if len(self.capability_manager.tools) > initial_tool_count:
-                self.refresh_capability()
+                self._refresh_capabilities()
 
             # 2. 构建初始消息列表 (包含上下文)
             messages = [SystemMessage(content=self.system_prompt_content)]
@@ -126,7 +178,7 @@ class AssistantAgent(BaseAgent):
                     messages.append(HumanMessage(content=content))
                 elif role == "System":
                     messages.append(SystemMessage(content=f"系统通知：{content}"))
-                elif role == "MonkeyKing":
+                elif role == self.name or role == "MonkeyKing":
                     # 检查是否是结构化的工具调用记录
                     if content.startswith("[Tool Call]"):
                         try:
@@ -183,7 +235,7 @@ class AssistantAgent(BaseAgent):
                     else:
                         self.last_mood = "neutral"
 
-                    self._append_to_session("MonkeyKing", response_text)
+                    self._append_to_session(self.name, response_text)
                     
                     # 检查是否需要整理 Session (从配置中读取阈值)
                     memory_cfg = LLMConfig.get_memory_config()
@@ -221,7 +273,7 @@ class AssistantAgent(BaseAgent):
                 # 处理工具调用
                 messages.append(response) # 将 AI 的工具请求加入上下文
                 # 记录 AI 的工具请求到 Session
-                self._append_to_session("MonkeyKing", f"[Tool Call] {json.dumps(response.tool_calls, ensure_ascii=False)}")
+                self._append_to_session(self.name, f"[Tool Call] {json.dumps(response.tool_calls, ensure_ascii=False)}")
                 
                 for tool_call in response.tool_calls:
                     tool_name = tool_call["name"]
@@ -253,6 +305,19 @@ class AssistantAgent(BaseAgent):
                     )
                     messages.append(tool_msg)
                     
+                    # 如果在执行工具（如 agent_creator）的过程中发生了分身切换
+                    if getattr(self, "_agent_switched_in_turn", False):
+                        # 我们不能把旧的 tool result 和后续的思考写入新的 session 中
+                        # 直接中断循环，返回切换成功的消息
+                        self.last_mood = "happy"
+                        if self.name.lower() == "monkeyking":
+                            switch_msg = "✅ 已收回毫毛，变回大圣本尊！有什么我可以帮您的？"
+                        else:
+                            switch_msg = f"✅ 已成功切换到分身 '{self.name}'！有什么我可以帮您的？"
+                        # 将这条成功消息记录到新分身的 session 中
+                        self._append_to_session(self.name, switch_msg)
+                        return switch_msg
+
                     # 记录工具执行结果到 Session (使用结构化 JSON 以保留 ID)
                     tool_res_data = {
                         "name": tool_name,
@@ -269,8 +334,8 @@ class AssistantAgent(BaseAgent):
             if callback:
                 callback.on_error(e)
             self.last_mood = "sad"
-            error_msg = f"抱歉，我目前处理请求时遇到了一点问题: {str(e)}"
-            self._append_to_session("MonkeyKing", error_msg)
+            error_msg = f"抱歉，我目前处理请求时遇到了一点问题：{str(e)}"
+            self._append_to_session(self.name, error_msg)
             return error_msg
 
     def trigger_memory_consolidation(self, reason: str) -> bool:
@@ -278,26 +343,31 @@ class AssistantAgent(BaseAgent):
         if not self.current_session:
             return False
             
-        # 快照当前的 session 用于后台整理，避免线程竞争
+        # 快照当前的 session 和路径用于后台整理，避免由于分身切换导致路径错乱
         session_snapshot = list(self.current_session)
+        paths_snapshot = {
+            "history": self.history_path,
+            "memory": self.memory_path,
+            "session": self.session_path
+        }
         # 立即清空内存中的当前 session
         self.current_session = [] 
-        if LLMConfig.SESSION_PATH.exists():
+        if self.session_path.exists():
             try:
-                LLMConfig.SESSION_PATH.unlink()
+                self.session_path.unlink()
             except:
                 pass
         
         # 启动后台线程执行繁重的总结和提炼工作
         thread = threading.Thread(
             target=self.consolidate_session, 
-            args=(session_snapshot,),
+            args=(session_snapshot, paths_snapshot),
             daemon=True
         )
         thread.start()
         return True
 
-    def consolidate_session(self, session_to_consolidate: List[Dict]):
+    def consolidate_session(self, session_to_consolidate: List[Dict], paths: Dict[str, Path] = None):
         """
         整理指定的 Session 快照：
         1. 汇总对话到 history.md
@@ -305,6 +375,10 @@ class AssistantAgent(BaseAgent):
         """
         if not session_to_consolidate:
             return
+
+        # 如果没有提供路径快照（兼容旧调用），则使用当前实例路径
+        history_path = paths["history"] if paths else self.history_path
+        memory_path = paths["memory"] if paths else self.memory_path
 
         try:
             session_str = json.dumps(session_to_consolidate, ensure_ascii=False, indent=2)
@@ -321,13 +395,18 @@ class AssistantAgent(BaseAgent):
             summary_res = self.llm.invoke([HumanMessage(content=summary_prompt)])
             summary_text = summary_res.content
 
-            with open(LLMConfig.HISTORY_PATH, "a", encoding="utf-8") as f:
+            with open(history_path, "a", encoding="utf-8") as f:
                 f.write(f"\n## Session 整理 ({start_time} 至 {end_time})\n")
                 f.write(f"整理时间：{current_date}\n\n")
                 f.write(summary_text)
                 f.write("\n\n---\n")
 
             # 任务 2: 提炼长期记忆存入 memory.md
+            # 先加载目标记忆文件的现有内容（因为整理可能是在切换分身后进行的）
+            existing_memory = ""
+            if memory_path.exists():
+                existing_memory = memory_path.read_text(encoding="utf-8")
+
             memory_prompt = (
                 "你现在是大圣的‘记忆元神’。请从以下对话中提炼长期记忆，并严格按以下 Markdown 格式整合到现有记忆中：\n\n"
                 "### 1. [核心规则与偏好]\n"
@@ -342,45 +421,47 @@ class AssistantAgent(BaseAgent):
                 "1. 结合现有的记忆进行更新、补充或去重。\n"
                 "2. 如果对话中有用户明确要求的‘以后要如何如何’，必须将其精准记录在‘核心规则与偏好’中。\n"
                 f"3. 当前日期是 {current_date}。\n\n"
-                f"现有的长期记忆：\n{self.long_term_memory}\n\n"
+                f"现有的长期记忆：\n{existing_memory}\n\n"
                 f"新的对话内容：\n{session_str}\n\n"
                 "请输出整合后的完整长期记忆："
             )
             memory_res = self.llm.invoke([HumanMessage(content=memory_prompt)])
-            self.long_term_memory = memory_res.content
+            new_long_term_memory = memory_res.content
 
-            with open(LLMConfig.MEMORY_PATH, "w", encoding="utf-8") as f:
-                f.write(self.long_term_memory)
+            with open(memory_path, "w", encoding="utf-8") as f:
+                f.write(new_long_term_memory)
 
-            # 更新系统提示词 (在后台线程完成更新)
-            self._update_system_prompt()
+            # 如果当前活跃的分身正是整理的对象，则更新内存中的记忆
+            if memory_path == self.memory_path:
+                self.long_term_memory = new_long_term_memory
+                self._update_system_prompt()
             
         except Exception as e:
-            print(f"整理 Session 时出错: {e}")
+            print(f"整理 Session 时出错：{e}")
 
     def _load_long_term_memory(self) -> str:
         """从 memory.md 加载长期记忆"""
-        if LLMConfig.MEMORY_PATH.exists():
+        if self.memory_path.exists():
             try:
-                return LLMConfig.MEMORY_PATH.read_text(encoding="utf-8")
+                return self.memory_path.read_text(encoding="utf-8")
             except Exception:
                 return ""
         return ""
 
     def _load_soul_description(self) -> str:
         """从 soul.md 加载灵魂描述"""
-        if LLMConfig.SOUL_PATH.exists():
+        if self.soul_path.exists():
             try:
-                return LLMConfig.SOUL_PATH.read_text(encoding="utf-8")
+                return self.soul_path.read_text(encoding="utf-8")
             except Exception:
                 return ""
         return ""
 
     def _load_current_session(self) -> List[Dict]:
         """从 session.json 加载当前会话"""
-        if LLMConfig.SESSION_PATH.exists():
+        if self.session_path.exists():
             try:
-                with open(LLMConfig.SESSION_PATH, "r", encoding="utf-8") as f:
+                with open(self.session_path, "r", encoding="utf-8") as f:
                     return json.load(f)
             except Exception:
                 return []
@@ -398,9 +479,9 @@ class AssistantAgent(BaseAgent):
         with self._session_lock:
             self.current_session.append(entry)
             try:
-                # 显式使用 absolute 路径并记录日志
-                session_path = LLMConfig.SESSION_PATH
-                with open(session_path, "w", encoding="utf-8") as f:
+                # 确保父目录存在
+                self.session_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(self.session_path, "w", encoding="utf-8") as f:
                     json.dump(self.current_session, f, ensure_ascii=False, indent=2)
             except Exception as e:
-                print(f"无法保存 Session 记录到 {LLMConfig.SESSION_PATH}: {e}")
+                print(f"无法保存 Session 记录到 {self.session_path}: {e}")
