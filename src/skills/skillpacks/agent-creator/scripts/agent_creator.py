@@ -61,6 +61,10 @@ class AgentCreatorTool(BaseMonkeyKingTool):
         - 当只有 2 个分身时（本体 +1 个分身，或 2 个分身），自动切换到另一个
         - 当有多个分身时，提示用户指定名称
         """
+        # 兼容性处理：将 "大圣"、"本体" 等别名映射回 "MonkeyKing"
+        if name and name.strip() in ["大圣", "本体", "孙悟空", "MonkeyKing"]:
+            name = "MonkeyKing"
+
         # 获取所有分身列表
         agents = self._get_all_agents()
         current_agent = self._agent_ref.name if hasattr(self, "_agent_ref") and self._agent_ref else "MonkeyKing"
@@ -108,6 +112,11 @@ class AgentCreatorTool(BaseMonkeyKingTool):
 
     def _create_agent(self, name: str, soul_content: str) -> str:
         """创建一个新的分身 Agent"""
+        # 鉴权：只有 MonkeyKing 本尊才能创建分身
+        current_agent = self._agent_ref.name if hasattr(self, "_agent_ref") and self._agent_ref else "MonkeyKing"
+        if current_agent.lower() != "monkeyking":
+            return f"错误：只有大圣本尊才能炼制分身，你当前是分身 '{current_agent}'，请先切换回本体。"
+
         if not name or not soul_content:
             return "错误：需要提供分身名称和人格描述（soul）。"
         
